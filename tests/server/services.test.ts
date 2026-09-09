@@ -322,3 +322,22 @@ test("server session expiry and invalid inputs are enforced", async () => {
     await s.db.close();
   }
 });
+
+
+test("Render origin is server configured and explicit custom domain takes precedence", () => {
+  const original = process.env.APP_ORIGIN;
+  const render = process.env.RENDER_EXTERNAL_URL;
+  try {
+    delete process.env.APP_ORIGIN;
+    process.env.RENDER_EXTERNAL_URL = "https://shiyu-test.onrender.com";
+    assert.equal(config().origin, "https://shiyu-test.onrender.com");
+    process.env.APP_ORIGIN = "https://film.example.com";
+    assert.equal(config().origin, "https://film.example.com");
+    delete process.env.APP_ORIGIN;
+    delete process.env.RENDER_EXTERNAL_URL;
+    assert.equal(config().origin, "http://127.0.0.1:3000");
+  } finally {
+    if(original === undefined) delete process.env.APP_ORIGIN; else process.env.APP_ORIGIN = original;
+    if(render === undefined) delete process.env.RENDER_EXTERNAL_URL; else process.env.RENDER_EXTERNAL_URL = render;
+  }
+});

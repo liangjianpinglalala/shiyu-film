@@ -1,0 +1,32 @@
+# Free pilot only: Render free PostgreSQL expires after 30 days.
+# AI generation remains unavailable until real providers and a worker are deployed.
+services:
+  - type: web
+    name: shiyu-film
+    runtime: docker
+    plan: free
+    region: singapore
+    repo: https://github.com/liangjianpinglalala/shiyu-film
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SHIYU_MODE
+        value: live
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: shiyu-film-db
+          property: connectionString
+      - key: TRUST_PROXY
+        value: "false"
+databases:
+  - name: shiyu-film-db
+    plan: free
+    region: singapore
+    databaseName: shiyu
+    user: shiyu
+    ipAllowList: []

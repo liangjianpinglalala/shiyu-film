@@ -27,3 +27,12 @@ POSTGRES_PASSWORD=随机十六进制密码
 默认 TRUST_PROXY=false，网络限流使用共享保守额度；只在验证所有请求均经可信反向代理且伪造转发头被覆盖后开启按 IP 限流。
 
 AI 适配器未实现，生产模式不会启动虚假的成片任务。接入供应商、对象存储与 FFmpeg 后才能开放真实制作。正式网站应使用此后台域名，GitHub Pages 可继续作为展示入口。
+
+
+## Render 免费试运行
+
+仓库根目录 `render.yaml` 定义 Docker 网站与 PostgreSQL 数据库，均显式使用 free 方案。通过 Render 的 New → Blueprint 连接本仓库，在创建页面核对费用为零后部署。平台自动生成 AUTH_SECRET，通过内部连接注入 DATABASE_URL；网站使用平台注入的 RENDER_EXTERNAL_URL 校验请求来源。使用自定义域名时设置 APP_ORIGIN 覆盖该值。
+
+这是试运行配置：免费网页会休眠，免费 PostgreSQL 在 30 天后到期，需在到期前备份或升级，不能当作长期正式数据库。此配置不运行 Worker，因为 AI 适配器尚未接通、生产模式禁止创建演示任务；未来启用 AI 时再添加常驻 Worker。网站账号登录及作品查询可先上线。费用以 Render 创建页面实际显示为准，付费升级需要另外确认。
+
+上线验收：/api/health 正常、/api/capabilities 显示 authReady=true/generationReady=false、新账号可注册退出并重新登录、未登录作品请求为 401、跨来源写请求被拒绝。部署成功后记录实际网址，不根据服务名猜测公网地址。

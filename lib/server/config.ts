@@ -14,7 +14,10 @@ export function config() {
     ),
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
-    origin: process.env.APP_ORIGIN || "http://127.0.0.1:3000",
+    origin:
+      process.env.APP_ORIGIN ||
+      process.env.RENDER_EXTERNAL_URL ||
+      "http://127.0.0.1:3000",
     sessionTtl: 7 * 86400000,
     stepDelay:
       mode === "demo"
