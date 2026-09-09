@@ -68,4 +68,21 @@ npm test
 - 第三方副作用的防重复必须由适配器传递幂等键或保存供应商任务 ID，不能仅依靠本地队列。
 - Worker 使用编译后的文件，修改后台逻辑后重启 `npm run dev` 使其生效。
 
-当前未发布 GitHub 远程仓库或公网网站。
+源码仓库：https://github.com/liangjianpinglalala/shiyu-film 。完整制作后台仍待部署，GitHub Pages 仅发布下述公开展示版。
+
+## GitHub Pages 公开展示版
+
+访问地址：https://liangjianpinglalala.github.io/shiyu-film/
+
+`main` 的新提交会触发 `Deploy GitHub Pages`：生成静态页面、运行展示版浏览器测试，再发布到 GitHub Pages。只上传 `.pages-build/out` 的构建产物，不上传服务器代码、数据库或环境变量。
+
+GitHub Pages 版本支持首页、手机布局、设置展示和预置动态分镜。页面明确标注公开展示版；验证码发送、登录、作品和 AI 成片入口不提供真实后台操作。此版本不会发送 API 请求，也不会用演示验证码伪造公网登录。
+
+```sh
+npm run build:pages
+npm run test:pages
+```
+
+静态构建在隔离目录 `.pages-build` 内运行，仅复制页面、客户端辅助代码、类型和插画，不修改或删除主项目后台路由。`npm run dev` 仍运行原有服务器演示版。
+
+更换仓库名时，在构建环境设置 `PAGES_BASE_PATH=/新仓库名`，并同步静态测试服务的路径。GitHub Pages 无法运行当前 Node.js Worker、数据库和真实登录，完整制作服务仍需服务器部署。

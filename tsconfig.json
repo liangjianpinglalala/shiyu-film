@@ -28,5 +28,5 @@
     ".next-test/types/**/*.ts",
     ".next-test/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", ".server"]
+  "exclude": ["node_modules", ".server", ".pages-build"]
 }

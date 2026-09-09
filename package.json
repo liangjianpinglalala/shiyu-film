@@ -11,7 +11,9 @@
     "worker": "npm run build:server && node --env-file-if-exists=.env.local .server/worker/index.js",
     "test:server": "npm run build:server && node --test .server/tests/server/services.test.js",
     "test:e2e": "playwright test",
-    "build:server": "tsc -p tsconfig.server.json"
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:pages": "node scripts/build-pages.mjs",
+    "test:pages": "playwright test --config playwright.pages.config.ts"
   },
   "dependencies": {
     "bullmq": "^6.3.4",

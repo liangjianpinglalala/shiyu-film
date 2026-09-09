@@ -24,14 +24,14 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { api, ApiError } from "../lib/client";
+import { api, ApiError, assetPath, staticSite } from "../lib/client";
 import type { Work, JobInput, Capabilities } from "../lib/shared/types";
 const examples = [
   {
     title: "静夜思",
     author: "李白 · 唐",
     kind: "古诗",
-    image: "/moon.svg",
+    image: assetPath("/moon.svg"),
     desc: "一缕月光，照见千年的思念。",
     time: "01:24",
   },
@@ -39,7 +39,7 @@ const examples = [
     title: "守株待兔",
     author: "寓言故事 · 成语",
     kind: "成语",
-    image: "/rabbit.svg",
+    image: assetPath("/rabbit.svg"),
     desc: "等待不会带来收获，行动才会。",
     time: "01:36",
   },
@@ -47,7 +47,7 @@ const examples = [
     title: "望庐山瀑布",
     author: "李白 · 唐",
     kind: "古诗",
-    image: "/landscape.svg",
+    image: assetPath("/landscape.svg"),
     desc: "走进诗仙笔下的壮阔山河。",
     time: "01:48",
   },
@@ -353,9 +353,12 @@ export default function Home() {
   async function download() {
     if (!selected) return;
     try {
-      const response = await fetch("/api/jobs/" + selected.id + "/download", {
-        credentials: "same-origin",
-      });
+      const response = await fetch(
+        assetPath("/api/jobs/" + selected.id + "/download"),
+        {
+          credentials: "same-origin",
+        },
+      );
       if (!response.ok) {
         const data = await response.json();
         throw new ApiError(response.status, data.error.message);
@@ -376,7 +379,7 @@ export default function Home() {
   return (
     <div className="app" data-ready={ready}>
       <aside className="sidebar">
-        <a className="brand" href="/" aria-label="诗语映画首页">
+        <a className="brand" href={assetPath("/")} aria-label="诗语映画首页">
           <span className="seal">诗</span>
           <span>
             诗语映画<small>SHIYU STUDIO</small>
@@ -471,7 +474,11 @@ export default function Home() {
           <div>
             <span className="demo-badge">
               <i />
-              {cap?.mode === "demo" ? "服务端演示模式" : "服务待配置"}
+              {staticSite
+                ? "GitHub Pages · 展示版"
+                : cap?.mode === "demo"
+                  ? "服务端演示模式"
+                  : "服务待配置"}
             </span>
             <button
               className="header-login"
@@ -541,7 +548,7 @@ export default function Home() {
                 </div>
                 <div className="hero-art">
                   <img
-                    src="/landscape.svg"
+                    src={assetPath("/landscape.svg")}
                     alt="青绿山峦、远舟与一轮明月的国风插画"
                   />
                   <div className="vertical-poem">
@@ -806,7 +813,7 @@ export default function Home() {
                 后台正在执行演示流程。关闭或刷新页面后，可从我的作品继续查看。
               </p>
               <div className="progress-art">
-                <img src="/landscape.svg" alt="制作中的国风画面" />
+                <img src={assetPath("/landscape.svg")} alt="制作中的国风画面" />
                 <span>
                   <LoaderCircle className="spin" />
                   灵感正在发生

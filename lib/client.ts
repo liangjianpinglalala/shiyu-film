@@ -1,3 +1,7 @@
+export const staticSite = process.env.NEXT_PUBLIC_STATIC_SITE === "1";
+export function assetPath(path: string) {
+  return (process.env.NEXT_PUBLIC_BASE_PATH || "") + path;
+}
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -12,7 +16,19 @@ export async function api<T>(
   data?: unknown,
   key?: string,
 ): Promise<T> {
-  const response = await fetch("/api/" + path, {
+  if (staticSite) {
+    if (method === "GET" && path === "capabilities")
+      return {
+        mode: "live",
+        smsReady: false,
+        generationReady: false,
+        message:
+          "公开展示版：可查看页面和示例动画。手机号登录、个人作品和 AI 成片需接入后台服务。",
+      } as T;
+    if (method === "GET" && path === "auth/me") return { user: null } as T;
+    throw new ApiError(503, "公开展示版暂不支持此功能，请先查看示例动画。");
+  }
+  const response = await fetch(assetPath("/api/" + path), {
     method,
     credentials: "same-origin",
     cache: "no-store",
