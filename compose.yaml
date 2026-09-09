@@ -1,6 +1,19 @@
 # Credentials must be supplied through environment variables or a private .env file.
 services:
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      SITE_HOST: ${SITE_HOST:?Set public domain}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web: { condition: service_healthy }
   postgres:
+    restart: unless-stopped
     image: postgres:17
     environment:
       POSTGRES_USER: shiyu
@@ -14,6 +27,7 @@ services:
       timeout: 3s
       retries: 20
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     command: [redis-server, --appendonly, "yes"]
     volumes:
@@ -24,8 +38,20 @@ services:
       timeout: 3s
       retries: 20
   web:
+    restart: unless-stopped
     build: .
-    ports: ["127.0.0.1:3000:3000"]
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     environment: &app-env
       NODE_ENV: production
       SHIYU_MODE: live
@@ -38,6 +64,7 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
   worker:
+    restart: unless-stopped
     build: .
     command: [node, .server/worker/index.js]
     environment: *app-env
@@ -45,5 +72,7 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 volumes:
+  caddy-data:
+  caddy-config:
   postgres-data:
   redis-data:

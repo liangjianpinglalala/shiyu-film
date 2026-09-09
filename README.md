@@ -1,6 +1,6 @@
 # 诗语映画 · 服务端开发版
 
-Next.js + React + TypeScript 国风知识动画网站。v0.2 将原型的浏览器登录与计时器替换为服务端会话、持久任务和独立 Worker。短信与 AI 供应商尚未选择，当前只运行明确标识的演示适配器。
+Next.js + React + TypeScript 国风知识动画网站。v0.2 将原型的浏览器登录与计时器替换为服务端会话、持久任务和独立 Worker。账号密码登录已实现；AI 供应商尚未选择，制作当前只运行明确标识的演示适配器。
 
 ## 运行
 
@@ -13,23 +13,23 @@ npm run dev
 
 打开 http://127.0.0.1:3000 。开发命令会同时启动网站与后台 Worker，默认明确启用 `demo`。无需 PostgreSQL、Redis 或付费账号；服务端数据保存在 `.data/shiyu.sqlite`。关闭浏览器不影响制作，刷新后从服务端恢复状态。停止整个开发进程会暂停处理，重启后会恢复排队任务；被中断的执行最多等待 60 秒租约到期。
 
-使用测试手机号（如 `13800138000`）获取验证码，填写 `123456`。验证码由服务器验证，5 分钟有效、60 秒发送间隔、最多 5 次错误、成功后立即失效。不要输入真实手机号：演示码不验证手机持有权，演示模式只适合本机体验。
+使用用户名和密码注册。用户名为 3–32 位字母、数字或下划线，以字母开头（不区分大小写）；密码为 10–128 位。无需手机号，注册后自动登录。密码使用随机盐和 scrypt 哈希保存，不存明文。暂未提供自助找回密码。
 
 ## 本轮实现
 
 - HttpOnly / SameSite 会话 cookie，服务端撤销登录，生产 HTTPS Secure cookie。
-- 手机号与网络发送限流，错误次数、验证码过期和一次性使用检查。
+- 用户名与网络注册/登录限流，错误密码也会消耗额度。
 - 任务创建、查询、下载、删除、重试均验证登录和用户归属。
 - 服务端验证题目与选项，每个用户最多一个活动任务、每 24 小时最多 20 次提交。
 - 幂等提交避免同一请求重复创建；任务的设置独立保存。
 - 后台执行 5 个演示步骤，保存检查点、租约和有限重试。支持工作进程崩溃后续跑，旧执行者不能覆盖新租约结果。
 - 生产数据库适配 PostgreSQL；配置 REDIS_URL 时 Worker 用 BullMQ 分发，定期根据数据库补投遗漏任务。
-- 未选服务商时真实模式明确返回未配置，不发送短信或请求 AI。
+- 未选服务商时真实模式明确返回未配置，不请求 AI。
 - 各制作服务接口见 `lib/server/media-contracts.ts`，流程接口见 `lib/server/providers.ts`。
 
 ## 仍未实现的部分
 
-尚无真实短信供应商、AI 脚本/图片/配音、字幕对齐、FFmpeg 成片、S3 存储或付款服务。下载是服务端生成的 TXT 演示说明，动态预览仍是预置 SVG 模板。作品归属已由服务器控制，但演示认证不能作为公开网站的真实身份认证。资料核验、生成质量、使用费用与模型调用幂等性需要在真实适配器接入后验证。
+尚无 AI 脚本/图片/配音、字幕对齐、FFmpeg 成片、S3 存储或付款服务。下载是服务端生成的 TXT 演示说明，动态预览仍是预置 SVG 模板。作品归属已由服务器控制，账号认证可以在安全配置完成后用于正式部署。资料核验、生成质量、使用费用与模型调用幂等性需要在真实适配器接入后验证。
 
 后台演示只消耗本地计算，不会发出付费调用。v0.1 浏览器里的旧演示记录不会自动导入。
 
@@ -38,14 +38,14 @@ npm run dev
 复制 `.env.example` 为 `.env.local` 后按需编辑。开发启动读取该文件。
 
 - `SHIYU_MODE=demo`：只允许非生产环境使用。`NODE_ENV=production` 时拒绝 demo。
-- `SHIYU_MODE=live`：所有真实供应商目前均未配置，接口会明确拒绝。
+- `SHIYU_MODE=live`：账号注册登录可用（需 AUTH_SECRET）；AI 接口尚未配置，会明确拒绝。
 - `AUTH_SECRET`：真实模式至少 32 个字符；必须随机生成，不能提交 Git。
 - `APP_ORIGIN`：请求允许的完整来源，必须与浏览器地址一致。
 - `DATABASE_URL`：配置则用 PostgreSQL，否则本地 SQLite。
 - `REDIS_URL`：配置则使用 BullMQ，否则本地数据库持久队列。
 - `TRUST_PROXY=true`：仅能在反向代理会覆盖不可信转发头时设置。默认所有请求共享保守网络额度。
 
-`compose.yaml` 提供 PostgreSQL、Redis、网站、Worker 的部署结构，启动前设置 APP_ORIGIN、AUTH_SECRET、POSTGRES_PASSWORD（使用随机十六进制密码，避免 URI 特殊字符），并配置 HTTPS 反向代理。数据库和 Redis 不开放宿主机端口。该结构尚未在本机实跑：本机没有 Docker、PostgreSQL 或 Redis。生产供应商仍待接入，不能直接对外提供成片服务。
+`compose.yaml` 提供 PostgreSQL、Redis、网站、Worker 的部署结构，启动前设置 SITE_HOST、APP_ORIGIN、AUTH_SECRET、POSTGRES_PASSWORD（使用随机十六进制密码，避免 URI 特殊字符），内含 Caddy HTTPS 反向代理，部署步骤见 [后台部署](docs/DEPLOYMENT.md)。数据库和 Redis 不开放宿主机端口。该结构尚未在本机实跑：本机没有 Docker、PostgreSQL 或 Redis。生产供应商仍待接入，不能直接对外提供成片服务。
 
 ## 验证
 
@@ -57,7 +57,7 @@ npm test
 
 服务测试：`npm run test:server`。浏览器测试：`npm run test:e2e`，会在 3100 端口启动独立服务、独立 Worker 和隔离数据库，不使用当前预览数据。Windows 默认使用本机 Edge，CI 使用 Playwright Chromium。
 
-测试报告保存到忽略提交的 `test-results`；测试数据库位于 `.data-test-*`，不提交。GitHub Actions 配置会运行构建与测试，目前尚未连接远程仓库。
+测试报告保存到忽略提交的 `test-results`；测试数据库位于 `.data-test-*`，不提交。GitHub Actions 配置会运行构建与测试，已连接 GitHub 远程仓库。
 
 ## 工程说明
 
@@ -76,7 +76,7 @@ npm test
 
 `main` 的新提交会触发 `Deploy GitHub Pages`：生成静态页面、运行展示版浏览器测试，再发布到 GitHub Pages。只上传 `.pages-build/out` 的构建产物，不上传服务器代码、数据库或环境变量。
 
-GitHub Pages 版本支持首页、手机布局、设置展示和预置动态分镜。页面明确标注公开展示版；验证码发送、登录、作品和 AI 成片入口不提供真实后台操作。此版本不会发送 API 请求，也不会用演示验证码伪造公网登录。
+GitHub Pages 版本支持首页、手机布局、设置展示和预置动态分镜。页面明确标注公开展示版；注册、登录、作品和 AI 成片入口不提供真实后台操作。此版本不会发送 API 请求，也不会伪造公网登录。
 
 ```sh
 npm run build:pages

@@ -17,7 +17,7 @@ export type Work = JobInput & {
 };
 export type Capabilities = {
   mode: "demo" | "live";
-  smsReady: boolean;
+  authReady: boolean;
   generationReady: boolean;
   message: string;
 };

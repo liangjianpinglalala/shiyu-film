@@ -1,13 +1,14 @@
-# 服务接口 v0.2
+# 服务接口 v0.3
 
 所有响应禁止缓存。变更请求必须携带与 APP_ORIGIN 完全一致的 Origin 和 application/json Content-Type。请求体最多 4 KiB。认证使用 HttpOnly cookie，任何接口都不接受客户端提供的用户 ID 作为权限依据。
 
 | 方法   | 路径                   | 说明                                  |
 | ------ | ---------------------- | ------------------------------------- |
-| GET    | /api/capabilities      | 当前模式、短信与生成可用性            |
-| POST   | /api/auth/code         | `{phone}` 获取验证码                  |
-| POST   | /api/auth/verify       | `{phone,code}` 验证并写入会话 cookie  |
-| GET    | /api/auth/me           | 当前脱敏用户或 null                   |
+| GET    | /api/health            | 数据库连接健康检查 |
+| GET    | /api/capabilities      | 当前模式、账号认证与生成可用性            |
+| POST   | /api/auth/register     | `{username,password}` 注册并写入会话 cookie |
+| POST   | /api/auth/login        | `{username,password}` 登录并写入会话 cookie |
+| GET    | /api/auth/me           | 当前用户（id、username）或 null                   |
 | POST   | /api/auth/logout       | `{}` 撤销服务端会话与 cookie          |
 | POST   | /api/jobs              | 创建任务，需要 Idempotency-Key 请求头 |
 | GET    | /api/jobs              | 当前用户最近 100 个任务               |
@@ -22,4 +23,6 @@
 
 错误：`{error:{code,message}}`，常见状态码 400（输入错误）、401（未登录）、403（来源错误）、404（不存在或无权访问）、409（任务冲突）、429（限流）、503（服务未配置）。
 
-供应商接入只修改服务器代码。SmsProvider 定义发送协议；ScriptProvider / ImageProvider / SpeechProvider / RenderProvider / ArtifactStore 定义制作与存储协议。接口存在不表示供应商已实现或凭证已经配置。生产 capability 必须在真实适配器、参数校验、权限检查和集成测试完成后才启用。
+供应商接入只修改服务器代码。ScriptProvider / ImageProvider / SpeechProvider / RenderProvider / ArtifactStore 定义制作与存储协议。接口存在不表示供应商已实现或凭证已经配置。生产 capability 必须在真实适配器、参数校验、权限检查和集成测试完成后才启用。
+
+手机号发送与验证接口已移除，返回 404。用户名大小写归一，密码 10–128 位；不支持自助找回。迁移采用附加 accounts 表，保留已有用户和作品；旧手机会话不会获得新账号权限，也不会自动绑定到同名账号。

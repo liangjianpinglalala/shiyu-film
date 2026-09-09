@@ -1,27 +1,34 @@
 import {
   createHmac,
   randomBytes,
-  randomInt,
   randomUUID,
+  scrypt,
   timingSafeEqual,
 } from "node:crypto";
+import { promisify } from "node:util";
 import { config } from "./config";
 import { AppError } from "./errors";
 import { database, type Database, type Query } from "./db";
-import { smsProvider, type SmsProvider } from "./providers";
-const phonePattern = /^1[3-9]\d{9}$/;
+const derive = promisify(scrypt);
 export function hash(value: string) {
   if (config().secret.length < 32)
     throw new AppError(503, "AUTH_NOT_CONFIGURED", "登录服务尚未完成安全配置");
   return createHmac("sha256", config().secret).update(value).digest("hex");
 }
-function validatePhone(phone: string) {
-  if (!phonePattern.test(phone))
+function credentials(username: string, password: string) {
+  const name = username.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_]{2,31}$/.test(name))
     throw new AppError(
       400,
-      "INVALID_PHONE",
-      "请输入有效的 11 位中国大陆手机号",
+      "INVALID_USERNAME",
+      "用户名需为 3–32 位字母、数字或下划线，以字母开头",
     );
+  if (password.length < 10 || password.length > 128)
+    throw new AppError(400, "INVALID_PASSWORD", "密码长度需为 10–128 位");
+  return name;
+}
+async function passwordHash(password: string, salt: string) {
+  return (await derive(password, salt, 64)) as Buffer;
 }
 export async function limit(
   q: Query,
@@ -48,130 +55,101 @@ export async function limit(
 export class AuthService {
   constructor(
     private db: Database = database(),
-    private sms: SmsProvider = smsProvider(),
     private now = () => Date.now(),
   ) {}
-  async send(phone: string, network: string) {
-    validatePhone(phone);
-    const now = this.now();
-    const code =
-      config().mode === "demo" ? "123456" : String(randomInt(100000, 1000000));
-    const codeHash = hash(phone + ":" + code + ":" + now);
+  private async throttle(name: string, network: string, action: string) {
+    // Commit counters before credential checks so failed attempts cannot roll them back.
     await this.db.transaction(async (q) => {
-      const [old] = await q<{ sent_at: number }>(
-        "SELECT sent_at FROM otp WHERE phone=$1",
-        [phone],
+      await limit(
+        q,
+        action + ":network:" + hash(network),
+        action === "register" ? 30 : 100,
+        3600000,
+        this.now(),
       );
-      if (old && now - Number(old.sent_at) < config().otpCooldown)
-        throw new AppError(429, "OTP_COOLDOWN", "请等待 60 秒后重新获取验证码");
-      await limit(q, "sms:network:" + hash(network), 20, 3600000, now);
-      await limit(q, "sms:phone:" + hash(phone), 10, 86400000, now);
-      await q(
-        "INSERT INTO otp (phone,code_hash,expires_at,sent_at,attempts,ready) VALUES ($1,$2,$3,$4,0,0) ON CONFLICT(phone) DO UPDATE SET code_hash=$2,expires_at=$3,sent_at=$4,attempts=0,ready=0",
-        [phone, codeHash, now + config().otpTtl, now],
-      );
+      await limit(q, action + ":account:" + hash(name), 10, 900000, this.now());
     });
-    try {
-      await this.sms.sendCode({
-        phone,
-        code,
-        expiresInSeconds: config().otpTtl / 1000,
-        requestId: randomUUID(),
-      });
-      await this.db.transaction((q) =>
-        q("UPDATE otp SET ready=1 WHERE phone=$1 AND code_hash=$2", [
-          phone,
-          codeHash,
-        ]),
-      );
-    } catch (e) {
-      await this.db.transaction((q) =>
-        q("DELETE FROM otp WHERE phone=$1 AND code_hash=$2", [phone, codeHash]),
-      );
-      throw e;
-    }
-    return { retryAfter: 60, expiresIn: 300, demo: config().mode === "demo" };
   }
-  async verify(phone: string, code: string, network: string) {
-    validatePhone(phone);
-    if (!/^\d{6}$/.test(code))
-      throw new AppError(400, "INVALID_CODE", "请输入 6 位验证码");
-    const now = this.now();
-    const outcome = await this.db.transaction(async (q) => {
-      await limit(q, "verify:" + hash(network), 100, 3600000, now);
-      const [otp] = await q<{
-        code_hash: string;
-        expires_at: number;
-        sent_at: number;
-        attempts: number;
-        ready: number;
-      }>("SELECT * FROM otp WHERE phone=$1", [phone]);
-      if (!otp || !otp.ready || Number(otp.expires_at) <= now)
-        return {
-          error: new AppError(
-            400,
-            "OTP_EXPIRED",
-            "请先获取有效验证码，验证码可能已过期或已使用",
-          ),
-        };
-      if (otp.attempts >= 5)
-        return {
-          error: new AppError(
-            429,
-            "OTP_LOCKED",
-            "验证码错误次数过多，请稍后重新获取",
-          ),
-        };
-      const valid = timingSafeEqual(
-        Buffer.from(otp.code_hash, "hex"),
-        Buffer.from(hash(phone + ":" + code + ":" + otp.sent_at), "hex"),
+  private async createSession(
+    q: Query,
+    user: { id: string; username: string },
+  ) {
+    const token = randomBytes(32).toString("hex");
+    await q("DELETE FROM sessions WHERE expires_at<=$1", [this.now()]);
+    await q(
+      "INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2,$3)",
+      [hash(token), user.id, this.now() + config().sessionTtl],
+    );
+    return { token, user };
+  }
+  async register(username: string, password: string, network: string) {
+    const name = credentials(username, password);
+    await this.throttle(name, network, "register");
+    const salt = randomBytes(16).toString("hex");
+    const digest = (await passwordHash(password, salt)).toString("hex");
+    return this.db.transaction(async (q) => {
+      const [existing] = await q(
+        "SELECT user_id FROM accounts WHERE username=$1",
+        [name],
       );
-      if (!valid) {
-        await q("UPDATE otp SET attempts=attempts+1 WHERE phone=$1", [phone]);
-        return { error: new AppError(400, "OTP_INVALID", "验证码不正确") };
-      }
-      await q("DELETE FROM otp WHERE phone=$1", [phone]);
+      if (existing)
+        throw new AppError(
+          409,
+          "USERNAME_TAKEN",
+          "用户名已被使用，请选择其他用户名",
+        );
+      const id = randomUUID();
+      // Preserve the legacy users schema and ownership; never turn old phone accounts into password accounts.
+      await q("INSERT INTO users (id,phone,created_at) VALUES ($1,$2,$3)", [
+        id,
+        "account:" + id,
+        this.now(),
+      ]);
       await q(
-        "INSERT INTO users (id,phone,created_at) VALUES ($1,$2,$3) ON CONFLICT(phone) DO NOTHING",
-        [randomUUID(), phone, now],
+        "INSERT INTO accounts (user_id,username,password_hash,salt) VALUES ($1,$2,$3,$4)",
+        [id, name, digest, salt],
       );
-      const [user] = await q<{ id: string; phone: string }>(
-        "SELECT id,phone FROM users WHERE phone=$1",
-        [phone],
-      );
-      const token = randomBytes(32).toString("hex");
-      await q("DELETE FROM sessions WHERE expires_at<=$1", [now]);
-      await q(
-        "INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2,$3)",
-        [hash(token), user.id, now + config().sessionTtl],
-      );
-      return {
-        token,
-        user: {
-          id: user.id,
-          phone: user.phone.slice(0, 3) + "****" + user.phone.slice(-4),
-        },
-      };
+      return this.createSession(q, { id, username: name });
     });
-    if (outcome.error) throw outcome.error;
-    return outcome as { token: string; user: { id: string; phone: string } };
+  }
+  async login(username: string, password: string, network: string) {
+    const name = credentials(username, password);
+    await this.throttle(name, network, "login");
+    const account = await this.db.transaction(
+      async (q) =>
+        (
+          await q<{ user_id: string; password_hash: string; salt: string }>(
+            "SELECT * FROM accounts WHERE username=$1",
+            [name],
+          )
+        )[0],
+    );
+    const digest = await passwordHash(
+      password,
+      account?.salt || "00000000000000000000000000000000",
+    );
+    const expected = Buffer.from(
+      account?.password_hash || "00".repeat(64),
+      "hex",
+    );
+    if (!timingSafeEqual(digest, expected) || !account)
+      throw new AppError(401, "INVALID_CREDENTIALS", "用户名或密码不正确");
+    return this.db.transaction((q) =>
+      this.createSession(q, { id: account.user_id, username: name }),
+    );
   }
   async session(token: string) {
     if (!/^[a-f0-9]{64}$/.test(token)) return null;
     return this.db.transaction(async (q) => {
-      const [user] = await q<{ id: string; phone: string }>(
-        "SELECT u.id,u.phone FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2",
+      const [user] = await q<{ id: string; username: string }>(
+        "SELECT a.user_id AS id,a.username FROM sessions s JOIN accounts a ON a.user_id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2",
         [hash(token), this.now()],
       );
-      return user
-        ? {
-            id: user.id,
-            phone: user.phone.slice(0, 3) + "****" + user.phone.slice(-4),
-          }
-        : null;
+      return user || null;
     });
   }
   async logout(token: string) {
+    if (!/^[a-f0-9]{64}$/.test(token)) return;
     await this.db.transaction((q) =>
       q("DELETE FROM sessions WHERE token_hash=$1", [hash(token)]),
     );

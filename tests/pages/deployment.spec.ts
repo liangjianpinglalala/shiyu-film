@@ -33,11 +33,10 @@ test("Pages loads all assets from repository path and never calls backend", asyn
   await expect(
     page
       .getByRole("dialog")
-      .getByRole("button", { name: "登录 / 注册", exact: true }),
+      .getByRole("button", { name: "注册并登录", exact: true }),
   ).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: "获取验证码", exact: true }),
-  ).toBeDisabled();
+  await expect(page.getByLabel("用户名", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("手机号码", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "关闭登录" }).click();
   await page.getByRole("link", { name: "诗语映画首页" }).click();
   await expect(page.locator("[data-ready=true]")).toBeVisible();

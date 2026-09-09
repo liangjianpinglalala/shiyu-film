@@ -19,20 +19,22 @@ const handler = route(async (request) => {
   if (path === "capabilities" && method === "GET")
     return NextResponse.json(capabilities());
   const auth = new AuthService();
-  if (path === "auth/code" && method === "POST") {
-    const b = await body(request);
-    return NextResponse.json(
-      await auth.send(
-        typeof b?.phone === "string" ? b.phone : "",
-        network(request),
-      ),
-    );
+  if (path === "health" && method === "GET") {
+    await (
+      await import("../../../lib/server/db")
+    )
+      .database()
+      .transaction((q) => q("SELECT 1"));
+    return NextResponse.json({ ok: true });
   }
-  if (path === "auth/verify" && method === "POST") {
+  if (
+    (path === "auth/register" || path === "auth/login") &&
+    method === "POST"
+  ) {
     const b = await body(request);
-    const session = await auth.verify(
-      typeof b?.phone === "string" ? b.phone : "",
-      typeof b?.code === "string" ? b.code : "",
+    const session = await auth[path === "auth/register" ? "register" : "login"](
+      typeof b?.username === "string" ? b.username : "",
+      typeof b?.password === "string" ? b.password : "",
       network(request),
     );
     const response = NextResponse.json({ user: session.user });
@@ -49,6 +51,8 @@ const handler = route(async (request) => {
     response.cookies.set(COOKIE, "", { ...cookieOptions(), maxAge: 0 });
     return response;
   }
+  if (path.startsWith("auth/"))
+    throw new AppError(404, "NOT_FOUND", "接口不存在");
   const user = await authenticated(request);
   const jobs = new JobService();
   if (path === "jobs" && method === "GET")
@@ -80,7 +84,7 @@ const handler = route(async (request) => {
         if (job.mode !== "demo")
           throw new AppError(503, "NOT_IMPLEMENTED", "成片存储服务尚未接入");
         const input = JSON.parse(job.input);
-        const text = `诗语映画 · 服务端演示说明\n题目：${input.title}\n画面比例：${input.ratio}\n适合：${input.age}\n任务编号：${job.id}\n\n已通过服务端队列完成演示流程。尚未调用 AI 生成脚本、短信或 MP4。`;
+        const text = `诗语映画 · 服务端演示说明\n题目：${input.title}\n画面比例：${input.ratio}\n适合：${input.age}\n任务编号：${job.id}\n\n已通过服务端队列完成演示流程。尚未调用 AI 生成脚本或 MP4。`;
         return new Response(text, {
           headers: {
             "Content-Type": "text/plain;charset=utf-8",

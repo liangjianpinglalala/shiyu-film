@@ -6,16 +6,11 @@ import {
 } from "@playwright/test";
 let seq = 0;
 const base = Number("150" + String(Date.now()).slice(-8));
-const phone = () => String(base + seq++);
+const phone = () => "user" + String(base + seq++);
 async function login(page: Page, number = phone()) {
-  await page.getByLabel("手机号码", { exact: true }).fill(number);
-  await page.getByRole("button", { name: "获取验证码", exact: true }).click();
-  await expect(page.getByRole("button", { name: /后重新获取/ })).toBeVisible();
-  await page.getByLabel("短信验证码", { exact: true }).fill("123456");
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "登录 / 注册", exact: true })
-    .click();
+  await page.getByLabel("用户名", { exact: true }).fill(number);
+  await page.getByLabel("密码", { exact: true }).fill("browser-password-123");
+  await page.getByRole("button", { name: "注册并登录", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   return number;
 }
@@ -29,10 +24,6 @@ test("server login, refresh during job, download and account isolation", async (
   await home(page);
   await page.getByLabel("古诗名或成语").fill("静夜思");
   await page.getByRole("button", { name: "生成动画", exact: true }).click();
-  await page.getByRole("button", { name: "获取验证码", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
-    "11 位",
-  );
   await login(page);
   await expect(
     page.getByRole("heading", { name: "「静夜思」正在化作画面" }),
@@ -82,30 +73,26 @@ test("mobile layout, settings, preview and sign out", async ({ page }) => {
     fullPage: true,
   });
 });
-test("changing phone invalidates UI challenge and server rejects incorrect code", async ({
+test("registered account can sign out and login; wrong password fails", async ({
   page,
 }) => {
   await home(page);
   await page.getByRole("button", { name: "登录 / 注册", exact: true }).click();
-  await page.getByLabel("手机号码", { exact: true }).fill(phone());
-  await page.getByRole("button", { name: "获取验证码", exact: true }).click();
-  await expect(page.getByRole("button", { name: /后重新获取/ })).toBeVisible();
-  await page.getByLabel("短信验证码", { exact: true }).fill("999999");
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "登录 / 注册", exact: true })
-    .click();
+  const name = await login(page);
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await page.getByRole("button", { name: "登录 / 注册", exact: true }).click();
+  await page.getByRole("button", { name: "已有账号？去登录" }).click();
+  await page.getByLabel("用户名", { exact: true }).fill(name);
+  await page.getByLabel("密码", { exact: true }).fill("incorrect-password");
+  await page.getByRole("button", { name: "登录账号", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
-    "不正确",
+    "用户名或密码不正确",
   );
-  await page.getByLabel("手机号码", { exact: true }).fill(phone());
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "登录 / 注册", exact: true })
-    .click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
-    "请先获取",
-  );
+  await page.getByLabel("密码", { exact: true }).fill("browser-password-123");
+  await page.getByRole("button", { name: "登录账号", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await page.reload();
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
 });
 test("desktop composition has no browser errors", async ({ page }) => {
   const errors: string[] = [];
@@ -135,19 +122,14 @@ test("desktop composition has no browser errors", async ({ page }) => {
 });
 const headers = { Origin: "http://127.0.0.1:3100" };
 async function apiLogin(request: APIRequestContext, number: string) {
-  expect(
-    (
-      await request.post("/api/auth/code", { headers, data: { phone: number } })
-    ).status(),
-  ).toBe(200);
-  const response = await request.post("/api/auth/verify", {
+  const response = await request.post("/api/auth/register", {
     headers,
-    data: { phone: number, code: "123456" },
+    data: { username: number, password: "browser-password-123" },
   });
   expect(response.status()).toBe(200);
   return response;
 }
-test("API enforces auth, origins, ownership, revocation and one-use codes", async ({
+test("API enforces auth, origins, ownership, revocation and removed SMS routes", async ({
   playwright,
 }) => {
   const a = await playwright.request.newContext({
@@ -157,12 +139,13 @@ test("API enforces auth, origins, ownership, revocation and one-use codes", asyn
       baseURL: "http://127.0.0.1:3100",
     });
   try {
+    expect((await a.get("/api/health")).status()).toBe(200);
     expect((await a.get("/api/jobs")).status()).toBe(401);
     expect(
       (
         await a.post("/api/auth/code", {
           headers: { Origin: "https://evil.example" },
-          data: { phone: phone() },
+          data: { username: phone(), password: "browser-password-123" },
         })
       ).status(),
     ).toBe(403);
@@ -177,7 +160,7 @@ test("API enforces auth, origins, ownership, revocation and one-use codes", asyn
           data: { phone: number, code: "123456" },
         })
       ).status(),
-    ).toBe(400);
+    ).toBe(404);
     const data = {
       title: "守株待兔",
       kind: "成语",

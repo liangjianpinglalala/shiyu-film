@@ -1,14 +1,6 @@
 import { config } from "./config";
 import { unavailable } from "./errors";
 import type { Capabilities, JobInput } from "../shared/types";
-export interface SmsProvider {
-  sendCode(input: {
-    phone: string;
-    code: string;
-    expiresInSeconds: number;
-    requestId: string;
-  }): Promise<void>;
-}
 export interface StageResult {
   kind: "demo-manifest" | "video";
   data: Record<string, unknown>;
@@ -24,14 +16,6 @@ export interface GenerationProvider {
   }): Promise<StageResult>;
 }
 // Live adapters must be explicitly implemented and selected; configuration alone never enables fake success.
-export function smsProvider(): SmsProvider {
-  if (config().mode === "demo") return { async sendCode() {} };
-  return {
-    async sendCode() {
-      throw unavailable("短信服务尚未配置，请联系管理员。");
-    },
-  };
-}
 export function generationProvider(): GenerationProvider {
   if (config().mode !== "demo")
     return {
@@ -72,10 +56,8 @@ export function capabilities(): Capabilities {
   const demo = config().mode === "demo";
   return {
     mode: demo ? "demo" : "live",
-    smsReady: demo,
+    authReady: config().secret.length >= 32,
     generationReady: demo,
-    message: demo
-      ? "服务端演示 · 不发送短信，不调用付费 AI"
-      : "短信与 AI 服务尚未配置",
+    message: demo ? "账号登录已启用 · 动画为演示流程" : "AI 制作服务尚未配置",
   };
 }

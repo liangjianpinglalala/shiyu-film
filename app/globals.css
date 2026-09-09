@@ -189,7 +189,18 @@ nav button small {
   place-items: center;
   border-radius: 50%;
 }
+.account > div {
+  min-width: 0;
+}
+.account .avatar,
+.account button {
+  flex-shrink: 0;
+}
 .account strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10px;
   font-weight: 500;
 }

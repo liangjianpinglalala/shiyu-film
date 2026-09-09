@@ -14,7 +14,7 @@ import {
   LogOut,
   ChevronRight,
   LoaderCircle,
-  Smartphone,
+  UserRound,
   ShieldCheck,
   WandSparkles,
   Volume2,
@@ -62,11 +62,10 @@ const stages = [
 export default function Home() {
   const [ready, setReady] = useState(false);
   const [page, setPage] = useState("home"),
-    [phone, setPhone] = useState(""),
+    [username, setUsername] = useState(""),
     [user, setUser] = useState(""),
-    [code, setCode] = useState(""),
-    [sent, setSent] = useState(false),
-    [count, setCount] = useState(0),
+    [password, setPassword] = useState(""),
+    [registering, setRegistering] = useState(true),
     [login, setLogin] = useState(false),
     [pending, setPending] = useState(""),
     [error, setError] = useState(""),
@@ -115,12 +114,12 @@ export default function Home() {
     let alive = true;
     Promise.all([
       api<Capabilities>("capabilities"),
-      api<{ user: { phone: string } | null }>("auth/me"),
+      api<{ user: { username: string } | null }>("auth/me"),
     ])
       .then(([c, s]) => {
         if (alive) {
           setCap(c);
-          setUser(s.user?.phone || "");
+          setUser(s.user?.username || "");
         }
       })
       .catch((e) => {
@@ -179,11 +178,7 @@ export default function Home() {
       clearInterval(timer);
     };
   }, [user, activeId]);
-  useEffect(() => {
-    if (count <= 0) return;
-    const timer = setTimeout(() => setCount(count - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [count]);
+
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);
@@ -196,16 +191,16 @@ export default function Home() {
   }, [playing]);
   async function requireLogin(target: string) {
     try {
-      const { user: session } = await api<{ user: { phone: string } | null }>(
-        "auth/me",
-      );
+      const { user: session } = await api<{
+        user: { username: string } | null;
+      }>("auth/me");
       if (!session) {
         setPending(target);
         setLogin(true);
         setError("");
         return;
       }
-      setUser(session.phone);
+      setUser(session.username);
       setPage(target);
     } catch (e) {
       handleError(e);
@@ -257,48 +252,20 @@ export default function Home() {
     }
     await submit();
   }
-  async function sendCode() {
-    if (busyRef.current) return;
-    if (!/^1[3-9]\d{9}$/.test(phone)) {
-      setError("请输入有效的 11 位中国大陆手机号");
-      return;
-    }
-    busyRef.current = true;
-    setBusy(true);
-    try {
-      const result = await api<{ retryAfter: number }>("auth/code", "POST", {
-        phone,
-      });
-      setSent(true);
-      setCount(result.retryAfter);
-      setError("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "验证码发送失败");
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
-  }
   async function verify() {
     if (busyRef.current) return;
-    if (!sent) {
-      setError("请先获取有效验证码");
-      return;
-    }
     busyRef.current = true;
     setBusy(true);
     let success = false;
     try {
-      const result = await api<{ user: { phone: string } }>(
-        "auth/verify",
+      const result = await api<{ user: { username: string } }>(
+        registering ? "auth/register" : "auth/login",
         "POST",
-        { phone, code },
+        { username, password },
       );
-      setUser(result.user.phone);
+      setUser(result.user.username);
       setLogin(false);
-      setCode("");
-      setSent(false);
-      setCount(0);
+      setPassword("");
       success = true;
       if (pending !== "generate") setPage(pending || "home");
     } catch (e) {
@@ -431,15 +398,15 @@ export default function Home() {
           </div>
           <div className="account">
             <span className="avatar">
-              {user ? "诗" : <Smartphone size={19} />}
+              {user ? "诗" : <UserRound size={19} />}
             </span>
             <div>
               <strong>
                 {user
-                  ? user.slice(0, 3) + "****" + user.slice(-4)
+                  ? user
                   : "开启你的创作之旅"}
               </strong>
-              <small>{user ? "原型体验账户" : "登录后保存你的作品"}</small>
+              <small>{user ? "创作账户" : "登录后保存你的作品"}</small>
             </div>
             <button
               aria-label={user ? "退出登录" : "登录"}
@@ -944,57 +911,45 @@ export default function Home() {
             </button>
             <span className="seal">诗</span>
             <h2 id="login-title">让灵感，有处安放。</h2>
-            <p>手机号验证登录，开启你的动画创作之旅。</p>
+            <p>
+              {registering
+                ? "创建账号，开启你的动画创作之旅。"
+                : "欢迎回来，继续你的动画创作。"}
+            </p>
             <div className="demo-notice">
-              {cap?.mode === "demo"
-                ? "演示模式：不发送真实短信，请使用测试手机号。"
-                : "短信服务尚未配置，暂时无法登录。"}
-              <br />
-              {cap?.mode === "demo" && (
-                <>
-                  点击获取后，使用演示验证码 <b>123456</b>（5 分钟有效）。
-                </>
-              )}
+              {staticSite
+                ? "公开展示版暂未连接后台，注册和登录暂不可用。"
+                : "无需手机号。请妥善保存用户名和密码，暂不支持自助找回密码。"}
             </div>
-            <label className="field-label" htmlFor="phone">
-              手机号码
+            <label className="field-label" htmlFor="username">
+              用户名
             </label>
             <div className="phone-field">
-              <span>+86</span>
               <input
-                id="phone"
-                type="tel"
-                autoComplete="tel-national"
-                maxLength={11}
-                placeholder="请输入 11 位手机号"
-                value={phone}
-                onChange={(e) => {
-                  setPhone(e.target.value.replace(/\D/g, ""));
-                  setSent(false);
-                  setCount(0);
-                  setCode("");
-                }}
+                id="username"
+                autoComplete="username"
+                maxLength={32}
+                placeholder="3–32 位字母、数字或下划线，以字母开头"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
               />
             </div>
-            <label className="field-label" htmlFor="code">
-              短信验证码
+            <label className="field-label" htmlFor="password">
+              密码
             </label>
             <div className="code-field">
               <input
-                id="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="请输入验证码"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                id="password"
+                type="password"
+                autoComplete={registering ? "new-password" : "current-password"}
+                maxLength={128}
+                placeholder="请输入 10–128 位密码"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && cap?.authReady) void verify();
+                }}
               />
-              <button
-                disabled={count > 0 || busy || !cap?.smsReady}
-                onClick={sendCode}
-              >
-                {count > 0 ? `${count}s 后重新获取` : "获取验证码"}
-              </button>
             </div>
             {error && (
               <p className="error" role="alert">
@@ -1004,17 +959,27 @@ export default function Home() {
             <button
               className="primary login-submit"
               onClick={verify}
-              disabled={busy || !cap?.smsReady}
+              disabled={busy || !cap?.authReady}
             >
-              登录 / 注册
+              {registering ? "注册并登录" : "登录账号"}
               <ArrowRight size={17} />
             </button>
             <p className="login-tip">
               <ShieldCheck size={14} />
-              首次验证将自动创建演示账户
+              密码经加盐哈希保存
             </p>
             <p className="privacy-tip">
-              登录与作品权限由服务器校验。演示验证码仅用于本地体验，不能用于公开服务。
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setRegistering(!registering);
+                  setError("");
+                  setPassword("");
+                }}
+              >
+                {registering ? "已有账号？去登录" : "没有账号？去注册"}
+              </button>
             </p>
           </section>
         </div>

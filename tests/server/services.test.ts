@@ -26,10 +26,9 @@ async function setup() {
   const db = new Database(undefined, dir);
   let now = Date.now();
   const clock = () => now;
-  const auth = new AuthService(db, undefined, clock);
+  const auth = new AuthService(db, clock);
   const jobs = new JobService(db, clock);
-  await auth.send("13800138000", "test");
-  const session = await auth.verify("13800138000", "123456", "test");
+  const session = await auth.register("tester", "test-password-123", "test");
   return {
     db,
     dir,
@@ -44,85 +43,69 @@ async function setup() {
 function errorCode(code: string) {
   return (e: unknown) => (e as { code: string }).code === code;
 }
-test("OTP is one use; sessions survive reconnect, expire, and revoke", async () => {
+test("password sessions survive reconnect, revoke and never store plaintext", async () => {
   const s = await setup();
+  const rows = await s.db.transaction((q) =>
+    q<{ password_hash: string; salt: string }>("SELECT * FROM accounts"),
+  );
+  assert.notEqual(rows[0].password_hash, "test-password-123");
+  assert.equal(rows[0].password_hash.length, 128);
+  await s.db.close();
+  const reopened = new Database(undefined, s.dir);
   try {
-    await assert.rejects(
-      s.auth.verify("13800138000", "123456", "test"),
-      errorCode("OTP_EXPIRED"),
-    );
-    assert.equal((await s.auth.session(s.session.token))?.phone, "138****8000");
-    await s.db.close();
-    const reopened = new Database(undefined, s.dir);
-    try {
-      assert.equal(
-        (await new AuthService(reopened).session(s.session.token))?.id,
-        s.session.user.id,
-      );
-    } finally {
-      await reopened.close();
-    }
-  } catch (e) {
-    throw e;
-  }
-});
-test("server owns expiry, cooldown and attempt lock, not browser clocks", async () => {
-  const s = await setup();
-  try {
-    s.advance(60001);
-    await s.auth.send("13900139000", "test");
-    await assert.rejects(
-      s.auth.send("13900139000", "test"),
-      errorCode("OTP_COOLDOWN"),
-    );
-    for (let i = 0; i < 5; i++)
-      await assert.rejects(
-        s.auth.verify("13900139000", "999999", "test"),
-        errorCode("OTP_INVALID"),
-      );
-    await assert.rejects(
-      s.auth.verify("13900139000", "123456", "test"),
-      errorCode("OTP_LOCKED"),
-    );
-    s.advance(60001);
-    await s.auth.send("13900139000", "test");
-    s.advance(300001);
-    await assert.rejects(
-      s.auth.verify("13900139000", "123456", "test"),
-      errorCode("OTP_EXPIRED"),
-    );
-    await s.auth.logout(s.session.token);
-    assert.equal(await s.auth.session(s.session.token), null);
+    const auth = new AuthService(reopened);
+    assert.equal((await auth.session(s.session.token))?.username, "tester");
+    const login = await auth.login("TESTER", "test-password-123", "test");
+    assert.equal(login.user.id, s.session.user.id);
+    await auth.logout(login.token);
+    assert.equal(await auth.session(login.token), null);
   } finally {
-    await s.db.close();
+    await reopened.close();
   }
 });
-test("simultaneous verification cannot reuse one OTP", async () => {
+test("duplicate registration is atomic and cannot overwrite passwords", async () => {
   const s = await setup();
   try {
-    await s.auth.send("13900139000", "test");
     const result = await Promise.allSettled([
-      s.auth.verify("13900139000", "123456", "test"),
-      s.auth.verify("13900139000", "123456", "test"),
+      s.auth.register("another", "another-password", "test"),
+      s.auth.register("ANOTHER", "different-password", "test"),
     ]);
     assert.equal(result.filter((r) => r.status === "fulfilled").length, 1);
+    await assert.rejects(
+      s.auth.register("tester", "new-password-123", "test"),
+      errorCode("USERNAME_TAKEN"),
+    );
+    assert.ok(await s.auth.login("tester", "test-password-123", "test"));
   } finally {
     await s.db.close();
   }
 });
-test("failed SMS delivery never creates a usable code", async () => {
+test("invalid credentials are generic and failed logins consume rate limits", async () => {
   const s = await setup();
   try {
-    const failing = new AuthService(s.db, {
-      async sendCode() {
-        throw new Error("provider failed");
-      },
-    });
-    await assert.rejects(failing.send("13900139000", "test"));
     await assert.rejects(
-      s.auth.verify("13900139000", "123456", "test"),
-      errorCode("OTP_EXPIRED"),
+      s.auth.register("x", "test-password-123", "test"),
+      errorCode("INVALID_USERNAME"),
     );
+    await assert.rejects(
+      s.auth.register("valid", "short", "test"),
+      errorCode("INVALID_PASSWORD"),
+    );
+    await assert.rejects(
+      s.auth.login("unknown", "wrong-password", "test"),
+      errorCode("INVALID_CREDENTIALS"),
+    );
+    for (let i = 0; i < 10; i++)
+      await assert.rejects(
+        s.auth.login("tester", "wrong-password", "test"),
+        errorCode("INVALID_CREDENTIALS"),
+      );
+    await assert.rejects(
+      s.auth.login("tester", "test-password-123", "test"),
+      errorCode("RATE_LIMITED"),
+    );
+    s.advance(900001);
+    assert.ok(await s.auth.login("tester", "test-password-123", "test"));
   } finally {
     await s.db.close();
   }
@@ -263,7 +246,8 @@ test("unconfigured live services fail closed and production rejects demo mode", 
   try {
     process.env.SHIYU_MODE = "live";
     process.env.AUTH_SECRET = "test-only-live-key-not-a-real-secret-12345";
-    assert.equal(capabilities().smsReady, false);
+    assert.equal(capabilities().authReady, true);
+    assert.ok(await s.auth.register("live_user", "live-password-123", "live"));
     assert.equal(capabilities().generationReady, false);
     await assert.rejects(
       s.jobs.create(s.session.user.id, input, "live-123456789012"),

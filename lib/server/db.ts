@@ -9,6 +9,7 @@ export type Query = <T = Record<string, unknown>>(
 ) => Promise<T[]>;
 const schema = [
   `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, phone TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS accounts (user_id TEXT PRIMARY KEY REFERENCES users(id), username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, salt TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at BIGINT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS otp (phone TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at BIGINT NOT NULL, sent_at BIGINT NOT NULL, attempts INTEGER NOT NULL, ready INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, reset_at BIGINT NOT NULL)`,
