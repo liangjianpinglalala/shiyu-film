@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": ".server",
+    "incremental": false,
+    "isolatedModules": false,
+    "plugins": [],
+    "rootDir": "."
+  },
+  "include": [
+    "lib/server/**/*.ts",
+    "lib/shared/**/*.ts",
+    "worker/**/*.ts",
+    "tests/server/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", ".next-test", ".server"]
+}

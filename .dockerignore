@@ -1,0 +1,10 @@
+node_modules
+.next
+.next-test
+.server
+.data
+.data-test*
+.cache
+.git
+.env*
+test-results

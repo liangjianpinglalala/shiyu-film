@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   ArrowRight,
   Sparkles,
@@ -24,7 +24,8 @@ import {
   Trash2,
 } from "lucide-react";
 
-type Work = { id: string; title: string; kind: string; date: string };
+import { api, ApiError } from "../lib/client";
+import type { Work, JobInput, Capabilities } from "../lib/shared/types";
 const examples = [
   {
     title: "静夜思",
@@ -70,10 +71,10 @@ export default function Home() {
     [pending, setPending] = useState(""),
     [error, setError] = useState(""),
     [title, setTitle] = useState(""),
-    [kind, setKind] = useState("自动识别"),
+    [kind, setKind] = useState<JobInput["kind"]>("自动识别"),
     [advanced, setAdvanced] = useState(false),
-    [ratio, setRatio] = useState("16:9 横屏"),
-    [age, setAge] = useState("小学阶段"),
+    [ratio, setRatio] = useState<JobInput["ratio"]>("16:9 横屏"),
+    [age, setAge] = useState<JobInput["age"]>("小学阶段"),
     [step, setStep] = useState(0),
     [running, setRunning] = useState(false),
     [works, setWorks] = useState<Work[]>([]),
@@ -82,126 +83,292 @@ export default function Home() {
     [scene, setScene] = useState(0),
     [playing, setPlaying] = useState(false),
     [notice, setNotice] = useState("");
+
+  const [cap, setCap] = useState<Capabilities | null>(null),
+    [busy, setBusy] = useState(false),
+    [activeId, setActiveId] = useState(""),
+    [connectionError, setConnectionError] = useState("");
+  const submission = useRef<{ input: string; key: string } | null>(null);
+  const busyRef = useRef(false);
+  const statusLabel = (w: Work) =>
+    ({
+      queued: "排队中",
+      running: "制作中",
+      completed: "演示完成",
+      failed: "制作失败",
+    })[w.status];
+  function handleError(e: unknown) {
+    const message = e instanceof Error ? e.message : "服务暂时不可用";
+    setNotice(message);
+    if (e instanceof ApiError && e.status === 401) {
+      setUser("");
+      setWorks([]);
+      setRunning(false);
+      setActiveId("");
+      setSelected(null);
+      setPage("home");
+      setPending("works");
+      setLogin(true);
+    }
+  }
   useEffect(() => {
-    setUser(sessionStorage.getItem("shiyu-user") || "");
-    setReady(true);
+    let alive = true;
+    Promise.all([
+      api<Capabilities>("capabilities"),
+      api<{ user: { phone: string } | null }>("auth/me"),
+    ])
+      .then(([c, s]) => {
+        if (alive) {
+          setCap(c);
+          setUser(s.user?.phone || "");
+        }
+      })
+      .catch((e) => {
+        if (alive) setConnectionError(e.message);
+      })
+      .finally(() => {
+        if (alive) setReady(true);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
   useEffect(() => {
-    if (user) {
+    if (!user) return;
+    let alive = true,
+      inFlight = false;
+    async function poll() {
+      if (inFlight) return;
+      inFlight = true;
       try {
-        setWorks(
-          JSON.parse(localStorage.getItem("shiyu-works-" + user) || "[]"),
-        );
-      } catch {
-        setWorks([]);
+        const { jobs } = await api<{ jobs: Work[] }>("jobs");
+        if (!alive) return;
+        setWorks(jobs);
+        setConnectionError("");
+        const current = activeId
+          ? jobs.find((j) => j.id === activeId)
+          : jobs.find((j) => j.status === "queued" || j.status === "running");
+        if (current) {
+          setSelected(current);
+          setStep(current.step);
+          if (current.status === "queued" || current.status === "running") {
+            if (!activeId) {
+              setActiveId(current.id);
+              setPage("progress");
+            }
+            setRunning(true);
+          } else if (activeId) {
+            setRunning(false);
+            setActiveId("");
+            setPage("detail");
+          }
+        }
+      } catch (e) {
+        if (alive) {
+          if (e instanceof ApiError && e.status === 401) handleError(e);
+          else setConnectionError("暂时无法同步进度，连接恢复后自动继续。");
+        }
+      } finally {
+        inFlight = false;
       }
-    } else setWorks([]);
-  }, [user]);
+    }
+    void poll();
+    const timer = setInterval(poll, 1000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [user, activeId]);
   useEffect(() => {
     if (count <= 0) return;
-    const t = setTimeout(() => setCount(count - 1), 1000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setCount(count - 1), 1000);
+    return () => clearTimeout(timer);
   }, [count]);
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(""), 4000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setNotice(""), 4000);
+    return () => clearTimeout(timer);
   }, [notice]);
   useEffect(() => {
     if (!playing) return;
-    const t = setInterval(() => setScene((n) => (n + 1) % 4), 3000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setScene((n) => (n + 1) % 4), 3000);
+    return () => clearInterval(timer);
   }, [playing]);
-  useEffect(() => {
-    if (!running) return;
-    const t = setInterval(() => setStep((n) => Math.min(n + 1, 5)), 1500);
-    return () => clearInterval(t);
-  }, [running]);
-  useEffect(() => {
-    if (step !== 5 || !running) return;
-    setRunning(false);
-    const w = {
-      id: crypto.randomUUID(),
-      title: title.trim(),
-      kind:
-        kind === "自动识别"
-          ? title.includes("兔") || title.includes("蛇")
-            ? "成语"
-            : "古诗"
-          : kind,
-      date: new Date().toLocaleDateString("zh-CN"),
-    };
-    setWorks((old) => {
-      const next = [w, ...old];
-      localStorage.setItem("shiyu-works-" + user, JSON.stringify(next));
-      return next;
-    });
-    setSelected(w);
-    setPage("detail");
-  }, [step, running, title, kind, user]);
-  function requireLogin(target: string) {
-    const activeUser = user || sessionStorage.getItem("shiyu-user");
-    if (activeUser && !user) setUser(activeUser);
-    if (!activeUser) {
-      setPending(target);
-      setLogin(true);
-      setError("");
-      return;
+  async function requireLogin(target: string) {
+    try {
+      const { user: session } = await api<{ user: { phone: string } | null }>(
+        "auth/me",
+      );
+      if (!session) {
+        setPending(target);
+        setLogin(true);
+        setError("");
+        return;
+      }
+      setUser(session.phone);
+      setPage(target);
+    } catch (e) {
+      handleError(e);
     }
-    setPage(target);
   }
-  function start() {
+  async function submit() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const input = { title: title.trim(), kind, ratio, age };
+      const serialized = JSON.stringify(input);
+      if (submission.current?.input !== serialized)
+        submission.current = { input: serialized, key: crypto.randomUUID() };
+      const { job } = await api<{ job: Work }>(
+        "jobs",
+        "POST",
+        input,
+        submission.current.key,
+      );
+      submission.current = null;
+      setSelected(job);
+      setActiveId(job.id);
+      setStep(job.step);
+      setRunning(true);
+      setPage("progress");
+    } catch (e) {
+      handleError(e);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+  async function start() {
     if (!title.trim()) {
       setNotice("请先输入古诗名或成语");
       return;
     }
+    if (running) {
+      setPage("progress");
+      setNotice("已有任务正在制作");
+      return;
+    }
     if (!user) {
       setPending("generate");
+      setError("");
       setLogin(true);
       return;
     }
-    setPage("progress");
-    setStep(0);
-    setRunning(true);
+    await submit();
   }
-  function verify() {
+  async function sendCode() {
+    if (busyRef.current) return;
     if (!/^1[3-9]\d{9}$/.test(phone)) {
       setError("请输入有效的 11 位中国大陆手机号");
       return;
     }
-    if (!sent || count === 0) {
-      setError("请先获取有效的演示验证码");
-      return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const result = await api<{ retryAfter: number }>("auth/code", "POST", {
+        phone,
+      });
+      setSent(true);
+      setCount(result.retryAfter);
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "验证码发送失败");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
-    if (code !== "123456") {
-      setError("验证码不正确，演示验证码为 123456");
-      return;
-    }
-    sessionStorage.setItem("shiyu-user", phone);
-    setUser(phone);
-    setLogin(false);
-    setCode("");
-    setSent(false);
-    setCount(0);
-    if (pending === "generate") {
-      setPage("progress");
-      setStep(0);
-      setRunning(true);
-    } else setPage(pending || "home");
   }
-  function download() {
-    const blob = new Blob(
-      [
-        `诗语映画 · 产品原型演示\n题目：${selected?.title}\n画面比例：${ratio}\n适合：${age}\n\n本文件为演示任务说明。尚未调用 AI 生成脚本、短信或 MP4。\n制作流程：资料核验 → 分镜 → 画面与配音 → 字幕剪辑 → 导出。`,
-      ],
-      { type: "text/plain;charset=utf-8" },
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${selected?.title}-演示说明.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  async function verify() {
+    if (busyRef.current) return;
+    if (!sent) {
+      setError("请先获取有效验证码");
+      return;
+    }
+    busyRef.current = true;
+    setBusy(true);
+    let success = false;
+    try {
+      const result = await api<{ user: { phone: string } }>(
+        "auth/verify",
+        "POST",
+        { phone, code },
+      );
+      setUser(result.user.phone);
+      setLogin(false);
+      setCode("");
+      setSent(false);
+      setCount(0);
+      success = true;
+      if (pending !== "generate") setPage(pending || "home");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "登录失败");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+    if (success && pending === "generate") await submit();
+  }
+  async function logout() {
+    try {
+      await api("auth/logout", "POST", {});
+      setUser("");
+      setWorks([]);
+      setPage("home");
+      setSelected(null);
+      setRunning(false);
+      setActiveId("");
+    } catch (e) {
+      handleError(e);
+    }
+  }
+  function openWork(w: Work) {
+    setSelected(w);
+    if (w.status === "queued" || w.status === "running") {
+      setActiveId(w.id);
+      setStep(w.step);
+      setRunning(true);
+      setPage("progress");
+    } else setPage("detail");
+  }
+  async function remove(w: Work) {
+    try {
+      await api("jobs/" + w.id, "DELETE", {});
+      setWorks((old) => old.filter((x) => x.id !== w.id));
+      setNotice("作品已删除");
+    } catch (e) {
+      handleError(e);
+    }
+  }
+  async function retry(w: Work) {
+    try {
+      await api("jobs/" + w.id + "/retry", "POST", {});
+      setActiveId(w.id);
+      setRunning(true);
+      setPage("progress");
+    } catch (e) {
+      handleError(e);
+    }
+  }
+  async function download() {
+    if (!selected) return;
+    try {
+      const response = await fetch("/api/jobs/" + selected.id + "/download", {
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new ApiError(response.status, data.error.message);
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = selected.title + "-演示说明.txt";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      handleError(e);
+    }
   }
   const artwork =
     examples.find((e) => e.title === (selected?.title || preview)) ||
@@ -275,11 +442,7 @@ export default function Home() {
               aria-label={user ? "退出登录" : "登录"}
               onClick={() => {
                 if (user) {
-                  sessionStorage.removeItem("shiyu-user");
-                  setUser("");
-                  setPage("home");
-                  setSelected(null);
-                  setRunning(false);
+                  void logout();
                 } else {
                   setPending("home");
                   setLogin(true);
@@ -308,7 +471,7 @@ export default function Home() {
           <div>
             <span className="demo-badge">
               <i />
-              交互原型 · 演示模式
+              {cap?.mode === "demo" ? "服务端演示模式" : "服务待配置"}
             </span>
             <button
               className="header-login"
@@ -327,11 +490,7 @@ export default function Home() {
               className="mobile-logout"
               aria-label="退出当前账户"
               onClick={() => {
-                sessionStorage.removeItem("shiyu-user");
-                setUser("");
-                setPage("home");
-                setSelected(null);
-                setRunning(false);
+                void logout();
               }}
             >
               <LogOut size={16} />
@@ -339,6 +498,14 @@ export default function Home() {
           )}
         </header>
         <main>
+          {connectionError && (
+            <div className="service-banner" role="status">
+              {connectionError}
+            </div>
+          )}
+          {cap?.mode === "live" && (
+            <div className="service-banner">{cap.message}</div>
+          )}
           {page === "home" && (
             <>
               <section className="hero">
@@ -400,7 +567,7 @@ export default function Home() {
                     <button
                       key={k}
                       className={kind === k ? "chosen" : ""}
-                      onClick={() => setKind(k)}
+                      onClick={() => setKind(k as JobInput["kind"])}
                     >
                       {k === "自动识别" && <Sparkles size={13} />} {k}
                     </button>
@@ -415,7 +582,11 @@ export default function Home() {
                     onKeyDown={(e) => e.key === "Enter" && start()}
                     placeholder="输入古诗名或成语，如：静夜思、守株待兔"
                   />
-                  <button className="primary" onClick={start}>
+                  <button
+                    className="primary"
+                    onClick={start}
+                    disabled={busy || !ready || !cap?.generationReady}
+                  >
                     <Sparkles size={17} />
                     生成动画
                     <ArrowRight size={17} />
@@ -449,7 +620,9 @@ export default function Home() {
                       画面比例
                       <select
                         value={ratio}
-                        onChange={(e) => setRatio(e.target.value)}
+                        onChange={(e) =>
+                          setRatio(e.target.value as JobInput["ratio"])
+                        }
                       >
                         <option>16:9 横屏</option>
                         <option>9:16 竖屏</option>
@@ -459,14 +632,16 @@ export default function Home() {
                       适合年龄
                       <select
                         value={age}
-                        onChange={(e) => setAge(e.target.value)}
+                        onChange={(e) =>
+                          setAge(e.target.value as JobInput["age"])
+                        }
                       >
                         <option>小学阶段</option>
                         <option>初中阶段</option>
                         <option>全年龄</option>
                       </select>
                     </label>
-                    <p>原型保存设置；真实渲染将在后续接入。</p>
+                    <p>设置随任务保存；真实渲染待接入。</p>
                   </div>
                 )}
               </section>
@@ -494,7 +669,13 @@ export default function Home() {
                       <div className="card-art">
                         <img src={e.image} alt={e.title + "国风示例插画"} />
                         <span className="category">{e.kind}动画</span>
-                        <span className="art-title">{e.title}</span>
+                        <span
+                          className={
+                            "art-title" + (e.title.length > 4 ? " long" : "")
+                          }
+                        >
+                          {e.title}
+                        </span>
                         <span className="play">
                           <Play size={19} fill="currentColor" />
                         </span>
@@ -571,8 +752,7 @@ export default function Home() {
                       <button
                         className="work-preview"
                         onClick={() => {
-                          setSelected(w);
-                          setPage("detail");
+                          openWork(w);
                         }}
                       >
                         <img
@@ -589,27 +769,23 @@ export default function Home() {
                       <div className="card-body">
                         <h3>{w.title}</h3>
                         <p>
-                          {w.date} · {w.kind} · 演示作品
+                          {w.date} · {w.kind} · {statusLabel(w)}
                         </p>
                         <div className="card-foot">
                           <button
                             onClick={() => {
-                              setSelected(w);
-                              setPage("detail");
+                              openWork(w);
                             }}
                           >
                             查看作品 <ArrowRight size={14} />
                           </button>
                           <button
+                            disabled={
+                              w.status === "queued" || w.status === "running"
+                            }
                             aria-label={"删除" + w.title}
                             onClick={() => {
-                              const next = works.filter((x) => x.id !== w.id);
-                              setWorks(next);
-                              localStorage.setItem(
-                                "shiyu-works-" + user,
-                                JSON.stringify(next),
-                              );
-                              setNotice("演示作品已删除");
+                              void remove(w);
                             }}
                           >
                             <Trash2 size={15} />
@@ -625,8 +801,10 @@ export default function Home() {
           {page === "progress" && (
             <section className="progress-page">
               <span className="eyebrow">A STORY IS TAKING SHAPE</span>
-              <h1>「{title}」正在化作画面</h1>
-              <p>这是模拟制作流程，无需额外操作。请保持当前页面打开。</p>
+              <h1>「{selected?.title || title}」正在化作画面</h1>
+              <p>
+                后台正在执行演示流程。关闭或刷新页面后，可从我的作品继续查看。
+              </p>
               <div className="progress-art">
                 <img src="/landscape.svg" alt="制作中的国风画面" />
                 <span>
@@ -657,7 +835,7 @@ export default function Home() {
                 ))}
               </ol>
               <p className="muted">
-                原型仅模拟状态流转，不调用模型、不收取费用。
+                任务进度已保存到服务器；演示模式不调用付费模型，不生成 MP4。
               </p>
             </section>
           )}
@@ -699,12 +877,28 @@ export default function Home() {
                   <span className="result-label">播放模板动态预览</span>
                 </button>
                 <div className="detail-info">
+                  {selected.status === "failed" && (
+                    <div className="service-banner" role="alert">
+                      <p>{selected.error}</p>
+                      <button
+                        className="secondary"
+                        onClick={() => retry(selected)}
+                        disabled={selected.attempts >= 6}
+                      >
+                        重试未完成步骤
+                      </button>
+                    </div>
+                  )}
                   <span className="demo-badge">原型演示结果</span>
                   <h2>故事的起点，已经准备好。</h2>
                   <p>
-                    本次体验展示了从登录到制作完成的操作流程。当前画面为预置模板，并非根据题目生成的成片。
+                    任务和制作设置已保存在服务器。当前画面为预置模板，并非根据题目生成的成片。
                   </p>
-                  <button className="primary" onClick={download}>
+                  <button
+                    className="primary"
+                    onClick={download}
+                    disabled={selected.status !== "completed"}
+                  >
                     <Download size={16} />
                     下载演示说明
                   </button>
@@ -720,7 +914,7 @@ export default function Home() {
               <span className="footer-seal">诗</span>诗语映画 · 让文化被看见
             </span>
             <span>
-              用科技传递诗意 <i /> 产品原型 v0.1
+              用科技传递诗意 <i /> 开发预览 v0.2
             </span>
           </footer>
         </main>
@@ -745,9 +939,15 @@ export default function Home() {
             <h2 id="login-title">让灵感，有处安放。</h2>
             <p>手机号验证登录，开启你的动画创作之旅。</p>
             <div className="demo-notice">
-              原型体验：不发送真实短信，请使用测试手机号。
+              {cap?.mode === "demo"
+                ? "演示模式：不发送真实短信，请使用测试手机号。"
+                : "短信服务尚未配置，暂时无法登录。"}
               <br />
-              点击获取后，使用演示验证码 <b>123456</b>。
+              {cap?.mode === "demo" && (
+                <>
+                  点击获取后，使用演示验证码 <b>123456</b>（5 分钟有效）。
+                </>
+              )}
             </div>
             <label className="field-label" htmlFor="phone">
               手机号码
@@ -783,16 +983,8 @@ export default function Home() {
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               />
               <button
-                disabled={count > 0}
-                onClick={() => {
-                  if (!/^1[3-9]\d{9}$/.test(phone)) {
-                    setError("请输入有效的 11 位中国大陆手机号");
-                    return;
-                  }
-                  setSent(true);
-                  setCount(60);
-                  setError("");
-                }}
+                disabled={count > 0 || busy || !cap?.smsReady}
+                onClick={sendCode}
               >
                 {count > 0 ? `${count}s 后重新获取` : "获取验证码"}
               </button>
@@ -802,7 +994,11 @@ export default function Home() {
                 {error}
               </p>
             )}
-            <button className="primary login-submit" onClick={verify}>
+            <button
+              className="primary login-submit"
+              onClick={verify}
+              disabled={busy || !cap?.smsReady}
+            >
               登录 / 注册
               <ArrowRight size={17} />
             </button>
@@ -811,7 +1007,7 @@ export default function Home() {
               首次验证将自动创建演示账户
             </p>
             <p className="privacy-tip">
-              仅在本机浏览器保存演示作品；生产登录与服务端权限尚未接入。
+              登录与作品权限由服务器校验。演示验证码仅用于本地体验，不能用于公开服务。
             </p>
           </section>
         </div>

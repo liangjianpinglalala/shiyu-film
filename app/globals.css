@@ -1525,3 +1525,26 @@ ol li small {
     margin-left: auto;
   }
 }
+.service-banner {
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  border: 1px solid #d7dfca;
+  background: #eef2e4;
+  border-radius: 7px;
+  color: #677550;
+  font-size: 12px;
+  line-height: 1.8;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+}
+.art-title {
+  top: 40px;
+  font-size: 22px;
+  letter-spacing: 2px;
+}
+.art-title.long {
+  font-size: 15px;
+}

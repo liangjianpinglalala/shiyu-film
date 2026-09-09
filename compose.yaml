@@ -1,0 +1,49 @@
+# Credentials must be supplied through environment variables or a private .env file.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: shiyu
+      POSTGRES_DB: shiyu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U shiyu]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  web:
+    build: .
+    ports: ["127.0.0.1:3000:3000"]
+    environment: &app-env
+      NODE_ENV: production
+      SHIYU_MODE: live
+      APP_ORIGIN: ${APP_ORIGIN:?Set public HTTPS origin}
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET}
+      DATABASE_URL: postgresql://shiyu:${POSTGRES_PASSWORD}@postgres:5432/shiyu
+      REDIS_URL: redis://redis:6379
+      TRUST_PROXY: "false"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+  worker:
+    build: .
+    command: [node, .server/worker/index.js]
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+volumes:
+  postgres-data:
+  redis-data:
