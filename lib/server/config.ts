@@ -20,6 +20,14 @@ export function config() {
       process.env.MOONSHOT_BASE_URL || "https://api.moonshot.ai/v1"
     ).replace(/\/$/, ""),
     kimiModel: process.env.KIMI_MODEL || "kimi-k3",
+    dashscopeApiKey: process.env.DASHSCOPE_API_KEY || "",
+    dashscopeBaseUrl: (
+      process.env.DASHSCOPE_BASE_URL || "https://dashscope.aliyuncs.com"
+    ).replace(/\/$/, ""),
+    dashscopeImageModel: process.env.DASHSCOPE_IMAGE_MODEL || "wan2.6-t2i",
+    dashscopeSpeechModel:
+      process.env.DASHSCOPE_SPEECH_MODEL || "cosyvoice-v3-flash",
+    dashscopeVoice: process.env.DASHSCOPE_VOICE || "longanyang",
     blobReady: Boolean(
       process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_OIDC_TOKEN,
     ),

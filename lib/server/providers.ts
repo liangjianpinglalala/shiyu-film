@@ -2,6 +2,9 @@ import { config } from "./config";
 import { unavailable } from "./errors";
 import type { Capabilities, JobInput } from "../shared/types";
 import { KimiScriptProvider } from "./kimi-script";
+import { DashScopeImageProvider, DashScopeSpeechProvider } from "./dashscope-media";
+import { FfmpegRenderProvider } from "./ffmpeg-render";
+import type { Script } from "./media-contracts";
 export interface StageResult {
   kind: "demo-manifest" | "production-manifest" | "video";
   data: Record<string, unknown>;
@@ -24,9 +27,44 @@ export function generationProvider(): GenerationProvider {
       async runStage({ stage, input, previous, signal, idempotencyKey }) {
         const data = { ...(previous?.data || {}) };
         const context = { signal, idempotencyKey, maxCostMinorUnits: 500 };
-        if (stage === 0)
+        if (stage === 0) {
           data.script = await scriptProvider.create(input, context);
-        else throw unavailable("国产画面与配音服务尚未配置");
+        } else if (stage === 1) {
+          const script = data.script as Script | undefined;
+          if (!script) throw unavailable("分镜脚本尚未生成");
+          const imageProvider = new DashScopeImageProvider(
+            undefined,
+            undefined,
+            input.ratio === "9:16 竖屏" ? "960*1696" : "1696*960",
+          );
+          data.images = await Promise.all(
+            script.scenes.map((scene) => imageProvider.create(scene, [], context)),
+          );
+        } else if (stage === 2) {
+          const script = data.script as Script | undefined;
+          if (!script) throw unavailable("分镜脚本尚未生成");
+          data.audio = await new DashScopeSpeechProvider().synthesize(
+            script.scenes.map((scene) => scene.narration).join("。"),
+            context,
+          );
+        } else if (stage === 3) {
+          const script = data.script as Script | undefined;
+          const images = data.images as Array<{ assetKey: string }> | undefined;
+          const audio = data.audio as { assetKey: string } | undefined;
+          if (!script || !images?.length || !audio) throw unavailable("成片素材尚未生成");
+          data.video = await new FfmpegRenderProvider().render(
+            {
+              script,
+              imageKeys: images.map((image) => image.assetKey),
+              audioKeys: [audio.assetKey],
+              ratio: input.ratio,
+            },
+            context,
+          );
+        } else if (stage === 4) {
+          if (!data.video) throw unavailable("视频尚未生成");
+          data.completedAt = new Date().toISOString();
+        }
         return { kind: "production-manifest", data: data as Record<string, unknown> };
       },
     };
@@ -63,13 +101,15 @@ export function generationProvider(): GenerationProvider {
 export function capabilities(): Capabilities {
   const demo = config().mode === "demo";
   const scriptReady = Boolean(config().moonshotApiKey);
-  const mediaReady = false;
+  const imageReady = Boolean(config().dashscopeApiKey);
+  const speechReady = Boolean(config().dashscopeApiKey);
+  const mediaReady = scriptReady && imageReady && speechReady && config().blobReady;
   return {
     mode: demo ? "demo" : "live",
     authReady: config().secret.length >= 32,
     scriptReady,
-    imageReady: false,
-    speechReady: false,
+    imageReady,
+    speechReady,
     storageReady: config().blobReady,
     generationReady: demo || mediaReady,
     message: demo

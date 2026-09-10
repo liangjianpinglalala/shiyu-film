@@ -17,6 +17,10 @@ import { KimiScriptProvider } from "../../lib/server/kimi-script";
 import type { JobInput } from "../../lib/shared/types";
 import type { ArtifactStore } from "../../lib/server/media-contracts";
 import { FfmpegRenderProvider } from "../../lib/server/ffmpeg-render";
+import {
+  DashScopeImageProvider,
+  DashScopeSpeechProvider,
+} from "../../lib/server/dashscope-media";
 import { writeFile } from "node:fs/promises";
 process.env.SHIYU_MODE = "demo";
 process.env.DEMO_STEP_MS = "0";
@@ -480,6 +484,72 @@ test("Kimi script adapter fails closed without credentials or valid output", asy
     else process.env.MOONSHOT_API_KEY = oldKey;
     if (oldNewKey === undefined) delete process.env.NEW_MOONSHOT_API_KEY;
     else process.env.NEW_MOONSHOT_API_KEY = oldNewKey;
+  }
+});
+
+test("DashScope adapters generate and persist image and narration assets", async () => {
+  const oldKey = process.env.DASHSCOPE_API_KEY;
+  process.env.DASHSCOPE_API_KEY = "dashscope-key-never-sent-to-a-real-service";
+  const assets = new Map<string, { data: Uint8Array; mimeType: string }>();
+  const store: ArtifactStore = {
+    async put(key, data, mimeType) { assets.set(key, { data, mimeType }); },
+    async read(key) { return assets.get(key)!; },
+    async remove(key) { assets.delete(key); },
+  };
+  const context = {
+    signal: new AbortController().signal,
+    idempotencyKey: "job-stage",
+    maxCostMinorUnits: 500,
+  };
+  let imageBody: Record<string, unknown> | undefined;
+  let imageCalls = 0;
+  const imageRequest: typeof fetch = async (_url, init) => {
+    imageCalls++;
+    if (imageCalls === 1) {
+      imageBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({
+        output: { choices: [{ message: { content: [{ image: "https://assets.example/scene.png" }] } }] },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(Buffer.from("png-image"), {
+      status: 200,
+      headers: { "Content-Type": "image/png" },
+    });
+  };
+  let speechBody: Record<string, unknown> | undefined;
+  let speechCalls = 0;
+  const speechRequest: typeof fetch = async (_url, init) => {
+    speechCalls++;
+    if (speechCalls === 1) {
+      speechBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({
+        output: { audio: { url: "https://assets.example/narration.mp3" } },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(Buffer.from("mp3-audio"), {
+      status: 200,
+      headers: { "Content-Type": "audio/mpeg" },
+    });
+  };
+  try {
+    const image = await new DashScopeImageProvider(store, imageRequest, "960*1696").create(
+      { id: "scene-1", narration: "月光照在窗前。", visualPrompt: "唐代夜晚的窗前", durationSeconds: 8 },
+      [],
+      context,
+    );
+    const speech = await new DashScopeSpeechProvider(store, speechRequest).synthesize(
+      "月光照在窗前。",
+      context,
+    );
+    assert.equal(image.assetKey, "jobs/job-stage/scene-1.png");
+    assert.equal(speech.assetKey, "jobs/job-stage/narration.mp3");
+    assert.equal(assets.get(image.assetKey)?.mimeType, "image/png");
+    assert.equal(assets.get(speech.assetKey)?.mimeType, "audio/mpeg");
+    assert.equal((imageBody?.parameters as { size: string }).size, "960*1696");
+    assert.equal((speechBody?.input as { format: string }).format, "mp3");
+  } finally {
+    if (oldKey === undefined) delete process.env.DASHSCOPE_API_KEY;
+    else process.env.DASHSCOPE_API_KEY = oldKey;
   }
 });
 

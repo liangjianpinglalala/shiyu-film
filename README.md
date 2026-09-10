@@ -47,10 +47,15 @@ npm run dev
 - `NEW_MOONSHOT_API_KEY`：仅服务端读取的 Kimi API Key；不得使用 `NEXT_PUBLIC_` 前缀或提交到 Git。旧变量名 `MOONSHOT_API_KEY` 仍兼容。
 - `MOONSHOT_BASE_URL`：Kimi API 地址，默认 `https://api.moonshot.ai/v1`。
 - `KIMI_MODEL`：脚本模型，默认 `kimi-k3`。
+- `DASHSCOPE_API_KEY`：阿里云百炼服务端密钥，同时用于万相画面与 CosyVoice 配音。
+- `DASHSCOPE_BASE_URL`：百炼 API 地址，默认 `https://dashscope.aliyuncs.com`。
+- `DASHSCOPE_IMAGE_MODEL`：文生图模型，默认 `wan2.6-t2i`。
+- `DASHSCOPE_SPEECH_MODEL`：配音模型，默认 `cosyvoice-v3-flash`。
+- `DASHSCOPE_VOICE`：配音音色，默认 `longanyang`。
 - `BLOB_READ_WRITE_TOKEN`：Vercel Blob 私有存储凭证；同项目连接存储后由平台注入。
 - `TRUST_PROXY=true`：仅能在反向代理会覆盖不可信转发头时设置。默认所有请求共享保守网络额度。
 
-`compose.yaml` 提供 PostgreSQL、Redis、网站、Worker 的部署结构，启动前设置 SITE_HOST、APP_ORIGIN、AUTH_SECRET、POSTGRES_PASSWORD（使用随机十六进制密码，避免 URI 特殊字符），内含 Caddy HTTPS 反向代理，部署步骤见 [后台部署](docs/DEPLOYMENT.md)。数据库和 Redis 不开放宿主机端口。该结构尚未在本机实跑：本机没有 Docker、PostgreSQL 或 Redis。生产供应商仍待接入，不能直接对外提供成片服务。
+`compose.yaml` 提供 PostgreSQL、Redis、网站、Worker 的部署结构，启动前设置 SITE_HOST、APP_ORIGIN、AUTH_SECRET、POSTGRES_PASSWORD（使用随机十六进制密码，避免 URI 特殊字符），内含 Caddy HTTPS 反向代理，部署步骤见 [后台部署](docs/DEPLOYMENT.md)。数据库和 Redis 不开放宿主机端口。生产环境配置 Kimi、百炼与 Blob 凭证后，可生成脚本、四幅国风画面、普通话配音、烧录字幕并导出 MP4。
 
 ## 验证
 

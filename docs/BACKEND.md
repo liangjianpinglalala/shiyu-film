@@ -17,15 +17,15 @@
 ## AI 扩展
 
 1. ScriptProvider：已实现 Kimi Chat Completions API 适配器，使用严格 JSON Schema 生成经校验的脚本及分镜。
-2. ImageProvider：接口保留，等待接入独立的国产图片生成服务；Kimi 的多模态能力属于输入理解，不生成图片。
-3. SpeechProvider：接口保留，等待接入独立的国产语音合成服务；Kimi 不提供语音合成端点。
+2. ImageProvider：已接入阿里云百炼万相 2.6，同步生成四幅横屏或竖屏国风画面并立即转存私有 Blob。
+3. SpeechProvider：已接入阿里云百炼 CosyVoice，将四幕旁白合成为普通话 MP3 并转存私有 Blob。
 4. RenderProvider：已实现 FFmpeg 渲染适配器，按横竖屏比例合成画面、普通话配音和烧录字幕，输出 H.264/AAC MP4。
 5. ArtifactStore：已实现 Vercel Blob 私有存储；读取仍需经过本站登录与作品归属校验后开放。
 
-适配器接口位于 lib/server/media-contracts.ts，Kimi 脚本适配器位于 lib/server/kimi-script.ts。配置 `NEW_MOONSHOT_API_KEY` 后能力接口会报告脚本服务就绪（旧变量名 `MOONSHOT_API_KEY` 仍兼容）；完整生成入口仍会保持关闭，直到画面和配音供应商完成接入。任务检查点、长阶段租约、私有存储与 FFmpeg 渲染结构可以继续复用。
+适配器接口位于 lib/server/media-contracts.ts，Kimi 脚本适配器位于 lib/server/kimi-script.ts，百炼画面与配音适配器位于 lib/server/dashscope-media.ts。配置 `NEW_MOONSHOT_API_KEY`、`DASHSCOPE_API_KEY` 和 Blob 存储后，五阶段任务会依次生成脚本、画面、配音、字幕视频并完成导出。
 
 ## 当前完成与后续条件
 
-已完成：账号密码认证、作品权限、持久队列、演示流程、数据库健康接口、同域 HTTPS 部署配置、自动测试。
+已完成：账号密码认证、作品权限、持久队列、Kimi 脚本、万相画面、CosyVoice 配音、FFmpeg MP4 合成、私有素材存储、同域 HTTPS 部署配置和自动测试。
 
-尚未完成：云平台开通与公网部署、真实 AI 适配器、MP4 合成与存储、自助找回密码、正式备份恢复演练。生产模式不会把演示结果标记为真实成片。选定托管平台和供应商后继续接入，无需重做前端。
+尚未完成：自助找回密码和正式备份恢复演练。生产环境只有在所有供应商凭证与存储均就绪时才开放完整成片入口。
