@@ -13,3 +13,4 @@ playwright-report/
 .data-test*/
 .server/
 .pages-build/
+.vercel/

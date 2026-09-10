@@ -1,7 +1,7 @@
 const env: Record<string, string | undefined> = process.env;
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "../../lib/server/db";
@@ -357,4 +357,13 @@ test("Vercel uses configured production origin, never the request host", () => {
       if(saved[index] === undefined) delete process.env[key]; else process.env[key] = saved[index];
     });
   }
+});
+
+test("Vercel deployment routes the public project to the Next.js service", () => {
+  const deployment = JSON.parse(readFileSync("vercel.json", "utf8"));
+  assert.deepEqual(deployment.services["shiyu-film"], {
+    root: ".",
+    framework: "nextjs",
+  });
+  assert.equal(deployment.rewrites[0].destination.service, "shiyu-film");
 });

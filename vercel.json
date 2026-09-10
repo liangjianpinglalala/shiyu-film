@@ -1,0 +1,17 @@
+{
+  "services": {
+    "shiyu-film": {
+      "root": ".",
+      "framework": "nextjs"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "type": "service",
+        "service": "shiyu-film"
+      }
+    }
+  ]
+}
