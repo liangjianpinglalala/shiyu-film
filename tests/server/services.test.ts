@@ -20,6 +20,8 @@ import {
   OpenAISpeechProvider,
 } from "../../lib/server/media-providers";
 import type { ArtifactStore } from "../../lib/server/media-contracts";
+import { FfmpegRenderProvider } from "../../lib/server/ffmpeg-render";
+import { writeFile } from "node:fs/promises";
 process.env.SHIYU_MODE = "demo";
 process.env.DEMO_STEP_MS = "0";
 const input: JobInput = {
@@ -496,6 +498,51 @@ test("OpenAI media adapters store generated image and narration as private artif
     if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = oldKey;
   }
+});
+
+test("FFmpeg renderer builds a ratio-aware captioned MP4 and stores it", async () => {
+  const assets = new Map<string, { data: Uint8Array; mimeType: string }>([
+    ["one", { data: Buffer.from("image-one"), mimeType: "image/png" }],
+    ["two", { data: Buffer.from("image-two"), mimeType: "image/png" }],
+    ["voice", { data: Buffer.from("audio"), mimeType: "audio/mpeg" }],
+  ]);
+  const store: ArtifactStore = {
+    async put(key, data, mimeType) { assets.set(key, { data, mimeType }); },
+    async read(key) { return assets.get(key)!; },
+    async remove(key) { assets.delete(key); },
+  };
+  let command: string[] = [];
+  const renderer = new FfmpegRenderProvider(
+    store,
+    async (_binary, args) => {
+      command = args;
+      await writeFile(args.at(-1)!, Buffer.from("mp4"));
+    },
+    "test-ffmpeg",
+  );
+  const result = await renderer.render(
+    {
+      script: {
+        title: "静夜思",
+        explanation: "思乡",
+        sources: [{ title: "source", url: "https://example.com" }],
+        scenes: [
+          { id: "one", narration: "床前明月光", visualPrompt: "月光", durationSeconds: 6 },
+          { id: "two", narration: "低头思故乡", visualPrompt: "故乡", durationSeconds: 7 },
+        ],
+      },
+      imageKeys: ["one", "two"],
+      audioKeys: ["voice"],
+      ratio: "9:16 竖屏",
+    },
+    { signal: new AbortController().signal, idempotencyKey: "render-test-123", maxCostMinorUnits: 0 },
+  );
+  assert.equal(result.durationMs, 13000);
+  assert.equal(result.mimeType, "video/mp4");
+  assert.equal(assets.get(result.assetKey)?.mimeType, "video/mp4");
+  assert.match(command.join(" "), /scale=720:1280/);
+  assert.match(command.join(" "), /subtitles=/);
+  assert.ok(command.includes("libx264"));
 });
 
 test("Vercel deployment routes the public project to the Next.js service", () => {
