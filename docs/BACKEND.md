@@ -16,13 +16,13 @@
 
 ## AI 扩展
 
-1. ScriptProvider：已实现 OpenAI Responses API 适配器，使用网页检索和严格 JSON Schema 生成经校验的脚本及分镜。
-2. ImageProvider：已实现 OpenAI 图像生成适配器，将国风 PNG 写入私有素材存储。
-3. SpeechProvider：已实现 OpenAI 普通话配音适配器，将 MP3 写入私有素材存储，并产生初步字幕时间段。
+1. ScriptProvider：已实现 Kimi Chat Completions API 适配器，使用严格 JSON Schema 生成经校验的脚本及分镜。
+2. ImageProvider：接口保留，等待接入独立的国产图片生成服务；Kimi 的多模态能力属于输入理解，不生成图片。
+3. SpeechProvider：接口保留，等待接入独立的国产语音合成服务；Kimi 不提供语音合成端点。
 4. RenderProvider：已实现 FFmpeg 渲染适配器，按横竖屏比例合成画面、普通话配音和烧录字幕，输出 H.264/AAC MP4。
 5. ArtifactStore：已实现 Vercel Blob 私有存储；读取仍需经过本站登录与作品归属校验后开放。
 
-适配器接口位于 lib/server/media-contracts.ts，OpenAI 脚本适配器位于 lib/server/openai-script.ts。配置 `OPENAI_API_KEY` 后能力接口会报告脚本服务就绪；完整生成入口仍会保持关闭，直到画面、配音、渲染和存储全部完成。下一阶段需保存供应商任务 ID、实现长任务轮询和租约续期、记录成本并设置上限、验证生成质量与真实文件。现有 30 秒阶段超时不能直接套用长时视频生成。
+适配器接口位于 lib/server/media-contracts.ts，Kimi 脚本适配器位于 lib/server/kimi-script.ts。配置 `MOONSHOT_API_KEY` 后能力接口会报告脚本服务就绪；完整生成入口仍会保持关闭，直到画面和配音供应商完成接入。任务检查点、长阶段租约、私有存储与 FFmpeg 渲染结构可以继续复用。
 
 ## 当前完成与后续条件
 

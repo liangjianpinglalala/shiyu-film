@@ -13,12 +13,8 @@ import {
   type GenerationProvider,
 } from "../../lib/server/providers";
 import { config } from "../../lib/server/config";
-import { OpenAIScriptProvider } from "../../lib/server/openai-script";
+import { KimiScriptProvider } from "../../lib/server/kimi-script";
 import type { JobInput } from "../../lib/shared/types";
-import {
-  OpenAIImageProvider,
-  OpenAISpeechProvider,
-} from "../../lib/server/media-providers";
 import type { ArtifactStore } from "../../lib/server/media-contracts";
 import { FfmpegRenderProvider } from "../../lib/server/ffmpeg-render";
 import { writeFile } from "node:fs/promises";
@@ -390,11 +386,11 @@ test("serverless processing can advance exactly one durable stage per request", 
   }
 });
 
-test("OpenAI script adapter sends a structured, non-stored request and validates output", async () => {
-  const oldKey = process.env.OPENAI_API_KEY;
-  const oldModel = process.env.OPENAI_TEXT_MODEL;
-  process.env.OPENAI_API_KEY = "test-key-never-sent-to-a-real-service";
-  process.env.OPENAI_TEXT_MODEL = "test-model";
+test("Kimi script adapter sends structured output request and validates result", async () => {
+  const oldKey = process.env.MOONSHOT_API_KEY;
+  const oldModel = process.env.KIMI_MODEL;
+  process.env.MOONSHOT_API_KEY = "test-key-never-sent-to-a-real-service";
+  process.env.KIMI_MODEL = "test-kimi-model";
   const script = {
     title: "静夜思",
     author: "李白",
@@ -410,10 +406,11 @@ test("OpenAI script adapter sends a structured, non-stored request and validates
   };
   let requestBody: Record<string, unknown> | undefined;
   let requestHeaders: HeadersInit | undefined;
-  const provider = new OpenAIScriptProvider(async (_url, init) => {
+  const provider = new KimiScriptProvider(async (url, init) => {
+    assert.equal(String(url), "https://api.moonshot.ai/v1/chat/completions");
     requestBody = JSON.parse(String(init?.body));
     requestHeaders = init?.headers;
-    return new Response(JSON.stringify({ output_text: JSON.stringify(script) }), {
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(script) } }] }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -427,125 +424,50 @@ test("OpenAI script adapter sends a structured, non-stored request and validates
       }),
       script,
     );
-    assert.equal(requestBody?.model, "test-model");
-    assert.equal(requestBody?.store, false);
-    assert.deepEqual(requestBody?.tools, [{ type: "web_search" }]);
+    assert.equal(requestBody?.model, "test-kimi-model");
     assert.equal(
-      (requestBody?.text as { format: { type: string } }).format.type,
+      (requestBody?.response_format as { type: string }).type,
       "json_schema",
     );
     assert.equal(
-      (requestHeaders as Record<string, string>)["Idempotency-Key"],
+      (requestHeaders as Record<string, string>)["X-Msh-Request-Nonce"],
       "script-test-123456",
     );
     assert.equal(capabilities().scriptReady, true);
   } finally {
-    if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = oldKey;
-    if (oldModel === undefined) delete process.env.OPENAI_TEXT_MODEL;
-    else process.env.OPENAI_TEXT_MODEL = oldModel;
+    if (oldKey === undefined) delete process.env.MOONSHOT_API_KEY;
+    else process.env.MOONSHOT_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.KIMI_MODEL;
+    else process.env.KIMI_MODEL = oldModel;
   }
 });
 
-test("OpenAI script adapter fails closed without credentials or valid output", async () => {
-  const oldKey = process.env.OPENAI_API_KEY;
+test("Kimi script adapter fails closed without credentials or valid output", async () => {
+  const oldKey = process.env.MOONSHOT_API_KEY;
   try {
-    delete process.env.OPENAI_API_KEY;
+    delete process.env.MOONSHOT_API_KEY;
     await assert.rejects(
-      new OpenAIScriptProvider().create(input, {
+      new KimiScriptProvider().create(input, {
         signal: new AbortController().signal,
         idempotencyKey: "script-test-absence",
         maxCostMinorUnits: 100,
       }),
       errorCode("SERVICE_NOT_CONFIGURED"),
     );
-    process.env.OPENAI_API_KEY = "test-key-never-sent-to-a-real-service";
+    process.env.MOONSHOT_API_KEY = "test-key-never-sent-to-a-real-service";
     await assert.rejects(
-      new OpenAIScriptProvider(async () =>
-        new Response(JSON.stringify({ output_text: "{}" }), { status: 200 }),
+      new KimiScriptProvider(async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: "{}" } }] }), { status: 200 }),
       ).create(input, {
         signal: new AbortController().signal,
         idempotencyKey: "script-test-invalid",
         maxCostMinorUnits: 100,
       }),
-      errorCode("SCRIPT_PROVIDER_INVALID"),
+      errorCode("KIMI_SCRIPT_INVALID"),
     );
   } finally {
-    if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = oldKey;
-  }
-});
-
-test("OpenAI media adapters store generated image and narration as private artifacts", async () => {
-  const oldKey = process.env.OPENAI_API_KEY;
-  process.env.OPENAI_API_KEY = "test-key-never-sent-to-a-real-service";
-  const saved = new Map<string, { data: Uint8Array; mimeType: string }>();
-  const store: ArtifactStore = {
-    async put(key, data, mimeType) { saved.set(key, { data, mimeType }); },
-    async read(key) { return saved.get(key)!; },
-    async remove(key) { saved.delete(key); },
-  };
-  const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
-  const mockFetch: typeof fetch = async (value, init) => {
-    const url = String(value);
-    requests.push({ url, body: JSON.parse(String(init?.body)) });
-    if (url.endsWith("/images/generations"))
-      return new Response(JSON.stringify({ data: [{ b64_json: Buffer.from("png").toString("base64") }] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    return new Response(Buffer.from("mp3"), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
-  };
-  const context = {
-    signal: new AbortController().signal,
-    idempotencyKey: "media-test-123456",
-    maxCostMinorUnits: 100,
-  };
-  try {
-    const image = await new OpenAIImageProvider(store, mockFetch).create(
-      { id: "scene-1", narration: "月光洒落", visualPrompt: "月下客舍", durationSeconds: 8 },
-      [],
-      context,
-    );
-    const speech = await new OpenAISpeechProvider(store, mockFetch).synthesize("床前明月光", context);
-    assert.equal(image.mimeType, "image/png");
-    assert.equal(saved.get(image.assetKey)?.mimeType, "image/png");
-    assert.equal(saved.get(speech.assetKey)?.mimeType, "audio/mpeg");
-    assert.equal(speech.segments[0].text, "床前明月光");
-    assert.equal(requests[0].body.output_format, "png");
-    assert.equal(requests[1].body.response_format, "mp3");
-    assert.equal(requests[1].body.voice, "coral");
-  } finally {
-    if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = oldKey;
-  }
-});
-test("OpenAI media adapter exposes a safe provider error code without response details", async () => {
-  const oldKey = process.env.OPENAI_API_KEY;
-  process.env.OPENAI_API_KEY = "test-key-never-sent-to-a-real-service";
-  const store = {
-    async put() {},
-    async read() { return { data: new Uint8Array(), mimeType: "image/png" }; },
-    async remove() {},
-  };
-  try {
-    await assert.rejects(
-      new OpenAIImageProvider(store, async () =>
-        new Response(JSON.stringify({ error: { code: "billing_hard_limit_reached", message: "sensitive detail" } }), {
-          status: 429,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ).create(
-        { id: "one", narration: "旁白", visualPrompt: "月光", durationSeconds: 6 },
-        [],
-        { signal: new AbortController().signal, idempotencyKey: "error-test", maxCostMinorUnits: 100 },
-      ),
-      (error: unknown) =>
-        (error as Error).message === "AI 画面生成失败（billing_hard_limit_reached）",
-    );
-  } finally {
-    if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = oldKey;
+    if (oldKey === undefined) delete process.env.MOONSHOT_API_KEY;
+    else process.env.MOONSHOT_API_KEY = oldKey;
   }
 });
 

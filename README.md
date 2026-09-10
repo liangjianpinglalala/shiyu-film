@@ -1,6 +1,6 @@
 # 诗语映画 · 服务端开发版
 
-Next.js + React + TypeScript 国风知识动画网站。账号密码登录、持久任务、OpenAI 脚本/国风画面/普通话配音、Vercel Blob 私有存储和 FFmpeg MP4 渲染已经串成完整流水线。生产任务由浏览器逐阶段触发，检查点保存在数据库，刷新后可继续并在完成后授权下载 MP4。
+Next.js + React + TypeScript 国风知识动画网站。账号密码登录、持久任务、Kimi 结构化脚本、Vercel Blob 私有存储和 FFmpeg MP4 渲染已实现。Kimi 不提供图片生成和语音合成 API，因此生产成片入口会保持关闭，直到接入独立的国产画面与配音服务。
 
 ## 运行
 
@@ -24,7 +24,7 @@ npm run dev
 - 幂等提交避免同一请求重复创建；任务的设置独立保存。
 - 后台执行 5 个演示步骤，保存检查点、租约和有限重试。支持工作进程崩溃后续跑，旧执行者不能覆盖新租约结果。
 - 生产数据库适配 PostgreSQL；配置 REDIS_URL 时 Worker 用 BullMQ 分发，定期根据数据库补投遗漏任务。
-- OpenAI Responses API 脚本适配器使用网页检索、严格 JSON Schema、服务端密钥和幂等键，并校验输出。
+- Kimi Chat Completions API 脚本适配器使用严格 JSON Schema、服务端密钥和请求随机数，并校验输出。
 - 完整成片服务未就绪时真实模式明确返回未配置，不请求 AI。
 - 各制作服务接口见 `lib/server/media-contracts.ts`，流程接口见 `lib/server/providers.ts`。
 
@@ -44,10 +44,9 @@ npm run dev
 - `APP_ORIGIN`：请求允许的完整来源，必须与浏览器地址一致。
 - `DATABASE_URL`：配置则用 PostgreSQL，否则本地 SQLite。
 - `REDIS_URL`：配置则使用 BullMQ，否则本地数据库持久队列。
-- `OPENAI_API_KEY`：仅服务端读取的 OpenAI API Key；不得使用 `NEXT_PUBLIC_` 前缀或提交到 Git。
-- `OPENAI_TEXT_MODEL`：脚本模型，默认 `gpt-5.6-luna`。
-- `OPENAI_IMAGE_MODEL`：画面模型，默认 `gpt-image-2`。
-- `OPENAI_SPEECH_MODEL` / `OPENAI_VOICE`：配音模型与声音，默认 `gpt-4o-mini-tts` / `coral`。
+- `MOONSHOT_API_KEY`：仅服务端读取的 Kimi API Key；不得使用 `NEXT_PUBLIC_` 前缀或提交到 Git。
+- `MOONSHOT_BASE_URL`：Kimi API 地址，默认 `https://api.moonshot.ai/v1`。
+- `KIMI_MODEL`：脚本模型，默认 `kimi-k3`。
 - `BLOB_READ_WRITE_TOKEN`：Vercel Blob 私有存储凭证；同项目连接存储后由平台注入。
 - `TRUST_PROXY=true`：仅能在反向代理会覆盖不可信转发头时设置。默认所有请求共享保守网络额度。
 

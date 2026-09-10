@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegPath from "ffmpeg-static";
 import { AppError, unavailable } from "./errors";
-import { VercelBlobStore } from "./media-providers";
+import { VercelBlobStore } from "./artifact-store";
 import type { ArtifactStore, CallContext, RenderProvider } from "./media-contracts";
 
 type Runner = (binary: string, args: string[], signal: AbortSignal) => Promise<void>;

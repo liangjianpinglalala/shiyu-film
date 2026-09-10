@@ -12,9 +12,9 @@ import { JobService, jobSchema, present, processOne } from "../../../lib/server/
 import { capabilities } from "../../../lib/server/providers";
 import { AppError } from "../../../lib/server/errors";
 import { database } from "../../../lib/server/db";
-import { OpenAIScriptProvider } from "../../../lib/server/openai-script";
+import { KimiScriptProvider } from "../../../lib/server/kimi-script";
 import { randomUUID } from "node:crypto";
-import { VercelBlobStore } from "../../../lib/server/media-providers";
+import { VercelBlobStore } from "../../../lib/server/artifact-store";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -69,7 +69,7 @@ const handler = route(async (request) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 50000);
     try {
-      const script = await new OpenAIScriptProvider().create(parsed.data, {
+      const script = await new KimiScriptProvider().create(parsed.data, {
         signal: controller.signal,
         idempotencyKey: request.headers.get("idempotency-key") || randomUUID(),
         maxCostMinorUnits: 100,

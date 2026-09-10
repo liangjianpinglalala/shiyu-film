@@ -14,11 +14,11 @@ export function config() {
     ),
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
-    openaiApiKey: process.env.OPENAI_API_KEY || "",
-    openaiTextModel: process.env.OPENAI_TEXT_MODEL || "gpt-5.6-luna",
-    openaiImageModel: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
-    openaiSpeechModel: process.env.OPENAI_SPEECH_MODEL || "gpt-4o-mini-tts",
-    openaiVoice: process.env.OPENAI_VOICE || "coral",
+    moonshotApiKey: process.env.MOONSHOT_API_KEY || "",
+    moonshotBaseUrl: (
+      process.env.MOONSHOT_BASE_URL || "https://api.moonshot.ai/v1"
+    ).replace(/\/$/, ""),
+    kimiModel: process.env.KIMI_MODEL || "kimi-k3",
     blobReady: Boolean(
       process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_OIDC_TOKEN,
     ),
