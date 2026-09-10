@@ -55,10 +55,14 @@ export function generationProvider(): GenerationProvider {
 export function capabilities(): Capabilities {
   const demo = config().mode === "demo";
   const scriptReady = Boolean(config().openaiApiKey);
+  const mediaReady = scriptReady && config().blobReady;
   return {
     mode: demo ? "demo" : "live",
     authReady: config().secret.length >= 32,
     scriptReady,
+    imageReady: mediaReady,
+    speechReady: mediaReady,
+    storageReady: config().blobReady,
     generationReady: demo,
     message: demo
       ? "账号登录已启用 · 动画为演示流程"

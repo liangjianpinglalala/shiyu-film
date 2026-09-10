@@ -1,6 +1,6 @@
 # 诗语映画 · 服务端开发版
 
-Next.js + React + TypeScript 国风知识动画网站。账号密码登录、持久任务及 OpenAI 结构化脚本适配器已经实现；画面、配音、渲染和存储仍待接入，生产成片入口在全部能力就绪前保持关闭。
+Next.js + React + TypeScript 国风知识动画网站。账号密码登录、持久任务、OpenAI 脚本/国风画面/普通话配音适配器以及 Vercel Blob 私有存储已经实现；渲染与完整任务编排仍待接入，生产成片入口在全部能力就绪前保持关闭。
 
 ## 运行
 
@@ -46,6 +46,9 @@ npm run dev
 - `REDIS_URL`：配置则使用 BullMQ，否则本地数据库持久队列。
 - `OPENAI_API_KEY`：仅服务端读取的 OpenAI API Key；不得使用 `NEXT_PUBLIC_` 前缀或提交到 Git。
 - `OPENAI_TEXT_MODEL`：脚本模型，默认 `gpt-5.6-luna`。
+- `OPENAI_IMAGE_MODEL`：画面模型，默认 `gpt-image-2`。
+- `OPENAI_SPEECH_MODEL` / `OPENAI_VOICE`：配音模型与声音，默认 `gpt-4o-mini-tts` / `coral`。
+- `BLOB_READ_WRITE_TOKEN`：Vercel Blob 私有存储凭证；同项目连接存储后由平台注入。
 - `TRUST_PROXY=true`：仅能在反向代理会覆盖不可信转发头时设置。默认所有请求共享保守网络额度。
 
 `compose.yaml` 提供 PostgreSQL、Redis、网站、Worker 的部署结构，启动前设置 SITE_HOST、APP_ORIGIN、AUTH_SECRET、POSTGRES_PASSWORD（使用随机十六进制密码，避免 URI 特殊字符），内含 Caddy HTTPS 反向代理，部署步骤见 [后台部署](docs/DEPLOYMENT.md)。数据库和 Redis 不开放宿主机端口。该结构尚未在本机实跑：本机没有 Docker、PostgreSQL 或 Redis。生产供应商仍待接入，不能直接对外提供成片服务。

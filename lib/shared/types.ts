@@ -32,6 +32,9 @@ export type Capabilities = {
   mode: "demo" | "live";
   authReady: boolean;
   scriptReady: boolean;
+  imageReady: boolean;
+  speechReady: boolean;
+  storageReady: boolean;
   generationReady: boolean;
   message: string;
 };

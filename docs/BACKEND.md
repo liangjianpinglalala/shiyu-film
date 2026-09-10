@@ -17,10 +17,10 @@
 ## AI 扩展
 
 1. ScriptProvider：已实现 OpenAI Responses API 适配器，使用网页检索和严格 JSON Schema 生成经校验的脚本及分镜。
-2. ImageProvider：生成一致风格的场景图片。
-3. SpeechProvider：合成配音并对齐字幕时间。
+2. ImageProvider：已实现 OpenAI 图像生成适配器，将国风 PNG 写入私有素材存储。
+3. SpeechProvider：已实现 OpenAI 普通话配音适配器，将 MP3 写入私有素材存储，并产生初步字幕时间段。
 4. RenderProvider：通过 FFmpeg 合成画面、配音与字幕，输出 MP4。
-5. ArtifactStore：私有保存素材与成片，授权下载。
+5. ArtifactStore：已实现 Vercel Blob 私有存储；读取仍需经过本站登录与作品归属校验后开放。
 
 适配器接口位于 lib/server/media-contracts.ts，OpenAI 脚本适配器位于 lib/server/openai-script.ts。配置 `OPENAI_API_KEY` 后能力接口会报告脚本服务就绪；完整生成入口仍会保持关闭，直到画面、配音、渲染和存储全部完成。下一阶段需保存供应商任务 ID、实现长任务轮询和租约续期、记录成本并设置上限、验证生成质量与真实文件。现有 30 秒阶段超时不能直接套用长时视频生成。
 

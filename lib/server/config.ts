@@ -16,6 +16,12 @@ export function config() {
     redisUrl: process.env.REDIS_URL,
     openaiApiKey: process.env.OPENAI_API_KEY || "",
     openaiTextModel: process.env.OPENAI_TEXT_MODEL || "gpt-5.6-luna",
+    openaiImageModel: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
+    openaiSpeechModel: process.env.OPENAI_SPEECH_MODEL || "gpt-4o-mini-tts",
+    openaiVoice: process.env.OPENAI_VOICE || "coral",
+    blobReady: Boolean(
+      process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_OIDC_TOKEN,
+    ),
     origin:
       process.env.APP_ORIGIN ||
       process.env.RENDER_EXTERNAL_URL ||

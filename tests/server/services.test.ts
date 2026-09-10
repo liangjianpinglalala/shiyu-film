@@ -15,6 +15,11 @@ import {
 import { config } from "../../lib/server/config";
 import { OpenAIScriptProvider } from "../../lib/server/openai-script";
 import type { JobInput } from "../../lib/shared/types";
+import {
+  OpenAIImageProvider,
+  OpenAISpeechProvider,
+} from "../../lib/server/media-providers";
+import type { ArtifactStore } from "../../lib/server/media-contracts";
 process.env.SHIYU_MODE = "demo";
 process.env.DEMO_STEP_MS = "0";
 const input: JobInput = {
@@ -442,6 +447,51 @@ test("OpenAI script adapter fails closed without credentials or valid output", a
       }),
       errorCode("SCRIPT_PROVIDER_INVALID"),
     );
+  } finally {
+    if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = oldKey;
+  }
+});
+
+test("OpenAI media adapters store generated image and narration as private artifacts", async () => {
+  const oldKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key-never-sent-to-a-real-service";
+  const saved = new Map<string, { data: Uint8Array; mimeType: string }>();
+  const store: ArtifactStore = {
+    async put(key, data, mimeType) { saved.set(key, { data, mimeType }); },
+    async read(key) { return saved.get(key)!; },
+    async remove(key) { saved.delete(key); },
+  };
+  const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const mockFetch: typeof fetch = async (value, init) => {
+    const url = String(value);
+    requests.push({ url, body: JSON.parse(String(init?.body)) });
+    if (url.endsWith("/images/generations"))
+      return new Response(JSON.stringify({ data: [{ b64_json: Buffer.from("png").toString("base64") }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    return new Response(Buffer.from("mp3"), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
+  };
+  const context = {
+    signal: new AbortController().signal,
+    idempotencyKey: "media-test-123456",
+    maxCostMinorUnits: 100,
+  };
+  try {
+    const image = await new OpenAIImageProvider(store, mockFetch).create(
+      { id: "scene-1", narration: "月光洒落", visualPrompt: "月下客舍", durationSeconds: 8 },
+      [],
+      context,
+    );
+    const speech = await new OpenAISpeechProvider(store, mockFetch).synthesize("床前明月光", context);
+    assert.equal(image.mimeType, "image/png");
+    assert.equal(saved.get(image.assetKey)?.mimeType, "image/png");
+    assert.equal(saved.get(speech.assetKey)?.mimeType, "audio/mpeg");
+    assert.equal(speech.segments[0].text, "床前明月光");
+    assert.equal(requests[0].body.output_format, "png");
+    assert.equal(requests[1].body.response_format, "mp3");
+    assert.equal(requests[1].body.voice, "coral");
   } finally {
     if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = oldKey;
