@@ -22,7 +22,7 @@
 4. RenderProvider：已实现 FFmpeg 渲染适配器，按横竖屏比例合成画面、普通话配音和烧录字幕，输出 H.264/AAC MP4。
 5. ArtifactStore：已实现 Vercel Blob 私有存储；读取仍需经过本站登录与作品归属校验后开放。
 
-适配器接口位于 lib/server/media-contracts.ts，Kimi 脚本适配器位于 lib/server/kimi-script.ts。配置 `MOONSHOT_API_KEY` 后能力接口会报告脚本服务就绪；完整生成入口仍会保持关闭，直到画面和配音供应商完成接入。任务检查点、长阶段租约、私有存储与 FFmpeg 渲染结构可以继续复用。
+适配器接口位于 lib/server/media-contracts.ts，Kimi 脚本适配器位于 lib/server/kimi-script.ts。配置 `NEW_MOONSHOT_API_KEY` 后能力接口会报告脚本服务就绪（旧变量名 `MOONSHOT_API_KEY` 仍兼容）；完整生成入口仍会保持关闭，直到画面和配音供应商完成接入。任务检查点、长阶段租约、私有存储与 FFmpeg 渲染结构可以继续复用。
 
 ## 当前完成与后续条件
 

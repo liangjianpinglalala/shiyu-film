@@ -44,7 +44,7 @@ npm run dev
 - `APP_ORIGIN`：请求允许的完整来源，必须与浏览器地址一致。
 - `DATABASE_URL`：配置则用 PostgreSQL，否则本地 SQLite。
 - `REDIS_URL`：配置则使用 BullMQ，否则本地数据库持久队列。
-- `MOONSHOT_API_KEY`：仅服务端读取的 Kimi API Key；不得使用 `NEXT_PUBLIC_` 前缀或提交到 Git。
+- `NEW_MOONSHOT_API_KEY`：仅服务端读取的 Kimi API Key；不得使用 `NEXT_PUBLIC_` 前缀或提交到 Git。旧变量名 `MOONSHOT_API_KEY` 仍兼容。
 - `MOONSHOT_BASE_URL`：Kimi API 地址，默认 `https://api.moonshot.ai/v1`。
 - `KIMI_MODEL`：脚本模型，默认 `kimi-k3`。
 - `BLOB_READ_WRITE_TOKEN`：Vercel Blob 私有存储凭证；同项目连接存储后由平台注入。

@@ -14,7 +14,8 @@ export function config() {
     ),
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
-    moonshotApiKey: process.env.MOONSHOT_API_KEY || "",
+    moonshotApiKey:
+      process.env.NEW_MOONSHOT_API_KEY || process.env.MOONSHOT_API_KEY || "",
     moonshotBaseUrl: (
       process.env.MOONSHOT_BASE_URL || "https://api.moonshot.ai/v1"
     ).replace(/\/$/, ""),

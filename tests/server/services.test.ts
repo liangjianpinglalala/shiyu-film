@@ -388,8 +388,10 @@ test("serverless processing can advance exactly one durable stage per request", 
 
 test("Kimi script adapter sends structured output request and validates result", async () => {
   const oldKey = process.env.MOONSHOT_API_KEY;
+  const oldNewKey = process.env.NEW_MOONSHOT_API_KEY;
   const oldModel = process.env.KIMI_MODEL;
-  process.env.MOONSHOT_API_KEY = "test-key-never-sent-to-a-real-service";
+  process.env.MOONSHOT_API_KEY = "legacy-key-never-sent-to-a-real-service";
+  process.env.NEW_MOONSHOT_API_KEY = "test-key-never-sent-to-a-real-service";
   process.env.KIMI_MODEL = "test-kimi-model";
   const script = {
     title: "静夜思",
@@ -433,10 +435,16 @@ test("Kimi script adapter sends structured output request and validates result",
       (requestHeaders as Record<string, string>)["X-Msh-Request-Nonce"],
       "script-test-123456",
     );
+    assert.equal(
+      (requestHeaders as Record<string, string>).Authorization,
+      "Bearer test-key-never-sent-to-a-real-service",
+    );
     assert.equal(capabilities().scriptReady, true);
   } finally {
     if (oldKey === undefined) delete process.env.MOONSHOT_API_KEY;
     else process.env.MOONSHOT_API_KEY = oldKey;
+    if (oldNewKey === undefined) delete process.env.NEW_MOONSHOT_API_KEY;
+    else process.env.NEW_MOONSHOT_API_KEY = oldNewKey;
     if (oldModel === undefined) delete process.env.KIMI_MODEL;
     else process.env.KIMI_MODEL = oldModel;
   }
@@ -444,8 +452,10 @@ test("Kimi script adapter sends structured output request and validates result",
 
 test("Kimi script adapter fails closed without credentials or valid output", async () => {
   const oldKey = process.env.MOONSHOT_API_KEY;
+  const oldNewKey = process.env.NEW_MOONSHOT_API_KEY;
   try {
     delete process.env.MOONSHOT_API_KEY;
+    delete process.env.NEW_MOONSHOT_API_KEY;
     await assert.rejects(
       new KimiScriptProvider().create(input, {
         signal: new AbortController().signal,
@@ -468,6 +478,8 @@ test("Kimi script adapter fails closed without credentials or valid output", asy
   } finally {
     if (oldKey === undefined) delete process.env.MOONSHOT_API_KEY;
     else process.env.MOONSHOT_API_KEY = oldKey;
+    if (oldNewKey === undefined) delete process.env.NEW_MOONSHOT_API_KEY;
+    else process.env.NEW_MOONSHOT_API_KEY = oldNewKey;
   }
 });
 
