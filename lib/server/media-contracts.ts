@@ -1,4 +1,4 @@
-import type { JobInput } from "../shared/types";
+import type { JobInput, StoryboardScript } from "../shared/types";
 /** Contracts for future adapters. No credentials or provider calls are implemented here. */
 export interface Source {
   title: string;
@@ -11,14 +11,7 @@ export interface Scene {
   visualPrompt: string;
   durationSeconds: number;
 }
-export interface Script {
-  title: string;
-  author?: string;
-  originalText?: string;
-  explanation: string;
-  sources: Source[];
-  scenes: Scene[];
-}
+export interface Script extends StoryboardScript {}
 export interface CallContext {
   signal: AbortSignal;
   idempotencyKey: string;

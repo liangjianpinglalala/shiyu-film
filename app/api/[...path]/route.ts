@@ -7,12 +7,16 @@ import {
   COOKIE,
   cookieOptions,
 } from "../../../lib/server/http";
-import { AuthService } from "../../../lib/server/auth";
-import { JobService, present } from "../../../lib/server/jobs";
+import { AuthService, limit } from "../../../lib/server/auth";
+import { JobService, jobSchema, present } from "../../../lib/server/jobs";
 import { capabilities } from "../../../lib/server/providers";
 import { AppError } from "../../../lib/server/errors";
+import { database } from "../../../lib/server/db";
+import { OpenAIScriptProvider } from "../../../lib/server/openai-script";
+import { randomUUID } from "node:crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 const handler = route(async (request) => {
   const path = request.nextUrl.pathname.replace(/^\/api\//, "");
   const method = request.method;
@@ -54,6 +58,26 @@ const handler = route(async (request) => {
   if (path.startsWith("auth/"))
     throw new AppError(404, "NOT_FOUND", "接口不存在");
   const user = await authenticated(request);
+  if (path === "scripts" && method === "POST") {
+    const parsed = jobSchema.safeParse(await body(request));
+    if (!parsed.success)
+      throw new AppError(400, "INVALID_JOB", "请输入有效题目并选择支持的制作设置");
+    await database().transaction((q) =>
+      limit(q, "daily-scripts:" + user.id, 5, 86400000, Date.now()),
+    );
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 50000);
+    try {
+      const script = await new OpenAIScriptProvider().create(parsed.data, {
+        signal: controller.signal,
+        idempotencyKey: request.headers.get("idempotency-key") || randomUUID(),
+        maxCostMinorUnits: 100,
+      });
+      return NextResponse.json({ script });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
   const jobs = new JobService();
   if (path === "jobs" && method === "GET")
     return NextResponse.json({ jobs: await jobs.list(user.id) });

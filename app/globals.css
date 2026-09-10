@@ -736,6 +736,43 @@ footer > span {
   position: relative;
   box-shadow: 0 30px 100px #0003;
 }
+.script-modal {
+  position: relative;
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 34px;
+  border-radius: 24px;
+  background: #fffdf8;
+  box-shadow: 0 24px 80px rgba(35, 28, 17, 0.22);
+}
+.script-modal blockquote {
+  white-space: pre-line;
+  margin: 20px 0;
+  padding: 18px 20px;
+  border-left: 3px solid #b88446;
+  background: #f7f1e5;
+  line-height: 1.9;
+}
+.script-modal h3 { margin: 24px 0 10px; }
+.script-modal > p { line-height: 1.8; }
+.script-scenes { display: grid; gap: 12px; }
+.script-scenes article {
+  padding: 16px;
+  border: 1px solid rgba(98, 77, 45, 0.14);
+  border-radius: 14px;
+  background: white;
+}
+.script-scenes p { margin: 8px 0; line-height: 1.65; }
+.script-scenes small { color: #756a59; line-height: 1.55; }
+.script-sources { display: flex; flex-wrap: wrap; gap: 10px; }
+.script-sources a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #7d5427;
+  text-decoration: underline;
+}
 .close {
   position: absolute;
   right: 17px;

@@ -25,7 +25,12 @@ import {
 } from "lucide-react";
 
 import { api, ApiError, assetPath, staticSite } from "../lib/client";
-import type { Work, JobInput, Capabilities } from "../lib/shared/types";
+import type {
+  Work,
+  JobInput,
+  Capabilities,
+  StoryboardScript,
+} from "../lib/shared/types";
 const examples = [
   {
     title: "静夜思",
@@ -82,6 +87,7 @@ export default function Home() {
     [scene, setScene] = useState(0),
     [playing, setPlaying] = useState(false),
     [notice, setNotice] = useState("");
+  const [script, setScript] = useState<StoryboardScript | null>(null);
 
   const [cap, setCap] = useState<Capabilities | null>(null),
     [busy, setBusy] = useState(false),
@@ -234,6 +240,25 @@ export default function Home() {
       setBusy(false);
     }
   }
+  async function createScript() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const { script: generated } = await api<{ script: StoryboardScript }>(
+        "scripts",
+        "POST",
+        { title: title.trim(), kind, ratio, age },
+        crypto.randomUUID(),
+      );
+      setScript(generated);
+    } catch (e) {
+      handleError(e);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
   async function start() {
     if (!title.trim()) {
       setNotice("请先输入古诗名或成语");
@@ -250,7 +275,8 @@ export default function Home() {
       setLogin(true);
       return;
     }
-    await submit();
+    if (cap?.generationReady) await submit();
+    else await createScript();
   }
   async function verify() {
     if (busyRef.current) return;
@@ -274,7 +300,10 @@ export default function Home() {
       busyRef.current = false;
       setBusy(false);
     }
-    if (success && pending === "generate") await submit();
+    if (success && pending === "generate") {
+      if (cap?.generationReady) await submit();
+      else await createScript();
+    }
   }
   async function logout() {
     try {
@@ -559,10 +588,14 @@ export default function Home() {
                   <button
                     className="primary"
                     onClick={start}
-                    disabled={busy || !ready || !cap?.generationReady}
+                    disabled={busy || !ready || (!cap?.generationReady && !cap?.scriptReady)}
                   >
                     <Sparkles size={17} />
-                    生成动画
+                    {busy
+                      ? "正在生成…"
+                      : cap?.generationReady
+                        ? "生成动画"
+                        : "生成 AI 脚本"}
                     <ArrowRight size={17} />
                   </button>
                 </div>
@@ -1067,6 +1100,46 @@ export default function Home() {
               {preview}
               <small>预置动态分镜 · 无配音 · 非生成视频</small>
             </h3>
+          </section>
+        </div>
+      )}
+      {script && (
+        <div className="overlay" onClick={() => setScript(null)}>
+          <section
+            className="script-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="script-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button className="close" aria-label="关闭脚本" onClick={() => setScript(null)}>
+              <X />
+            </button>
+            <span className="demo-badge">AI 编导脚本</span>
+            <h2 id="script-title">{script.title}</h2>
+            {script.author && <p className="muted">{script.author}</p>}
+            {script.originalText && <blockquote>{script.originalText}</blockquote>}
+            <h3>背后含义</h3>
+            <p>{script.explanation}</p>
+            <h3>动画分镜</h3>
+            <div className="script-scenes">
+              {script.scenes.map((item, index) => (
+                <article key={item.id}>
+                  <strong>分镜 {index + 1} · {item.durationSeconds} 秒</strong>
+                  <p>{item.narration}</p>
+                  <small>{item.visualPrompt}</small>
+                </article>
+              ))}
+            </div>
+            <h3>资料来源</h3>
+            <div className="script-sources">
+              {script.sources.map((source) => (
+                <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
+                  {source.title}<ArrowUpRight size={14} />
+                </a>
+              ))}
+            </div>
+            <p className="muted">脚本已经真实生成；画面、配音和 MP4 将在后续服务接入后开放。</p>
           </section>
         </div>
       )}
