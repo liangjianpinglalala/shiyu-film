@@ -2,12 +2,12 @@
   "services": {
     "shiyu-film": {
       "root": ".",
-      "framework": "nextjs"
-    }
-  },
-  "functions": {
-    "app/api/**/*": {
-      "maxDuration": 300
+      "framework": "nextjs",
+      "functions": {
+        "app/api/**/*": {
+          "maxDuration": 300
+        }
+      }
     }
   },
   "rewrites": [

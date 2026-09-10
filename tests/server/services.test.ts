@@ -550,6 +550,7 @@ test("Vercel deployment routes the public project to the Next.js service", () =>
   assert.deepEqual(deployment.services["shiyu-film"], {
     root: ".",
     framework: "nextjs",
+    functions: { "app/api/**/*": { maxDuration: 300 } },
   });
   assert.equal(deployment.rewrites[0].destination.service, "shiyu-film");
 });
