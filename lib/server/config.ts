@@ -17,6 +17,9 @@ export function config() {
     origin:
       process.env.APP_ORIGIN ||
       process.env.RENDER_EXTERNAL_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? "https://" + process.env.VERCEL_PROJECT_PRODUCTION_URL
+        : "") ||
       "http://127.0.0.1:3000",
     sessionTtl: 7 * 86400000,
     stepDelay:

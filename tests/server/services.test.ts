@@ -341,3 +341,20 @@ test("Render origin is server configured and explicit custom domain takes preced
     if(render === undefined) delete process.env.RENDER_EXTERNAL_URL; else process.env.RENDER_EXTERNAL_URL = render;
   }
 });
+
+
+test("Vercel uses configured production origin, never the request host", () => {
+  const keys = ["APP_ORIGIN", "RENDER_EXTERNAL_URL", "VERCEL_PROJECT_PRODUCTION_URL"] as const;
+  const saved = keys.map(key => process.env[key]);
+  try {
+    for (const key of keys) delete process.env[key];
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "shiyu-example.vercel.app";
+    assert.equal(config().origin, "https://shiyu-example.vercel.app");
+    process.env.APP_ORIGIN = "https://film.example.com";
+    assert.equal(config().origin, "https://film.example.com");
+  } finally {
+    keys.forEach((key, index) => {
+      if(saved[index] === undefined) delete process.env[key]; else process.env[key] = saved[index];
+    });
+  }
+});
