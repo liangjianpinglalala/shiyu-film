@@ -13,9 +13,11 @@ import {
   type GenerationProvider,
 } from "../../lib/server/providers";
 import { config } from "../../lib/server/config";
+import { OpenAIScriptProvider } from "../../lib/server/openai-script";
+import type { JobInput } from "../../lib/shared/types";
 process.env.SHIYU_MODE = "demo";
 process.env.DEMO_STEP_MS = "0";
-const input = {
+const input: JobInput = {
   title: "静夜思",
   kind: "古诗",
   ratio: "16:9 横屏",
@@ -247,6 +249,7 @@ test("unconfigured live services fail closed and production rejects demo mode", 
     process.env.SHIYU_MODE = "live";
     process.env.AUTH_SECRET = "test-only-live-key-not-a-real-secret-12345";
     assert.equal(capabilities().authReady, true);
+    assert.equal(capabilities().scriptReady, false);
     assert.ok(await s.auth.register("live_user", "live-password-123", "live"));
     assert.equal(capabilities().generationReady, false);
     await assert.rejects(
@@ -356,6 +359,92 @@ test("Vercel uses configured production origin, never the request host", () => {
     keys.forEach((key, index) => {
       if(saved[index] === undefined) delete process.env[key]; else process.env[key] = saved[index];
     });
+  }
+});
+
+test("OpenAI script adapter sends a structured, non-stored request and validates output", async () => {
+  const oldKey = process.env.OPENAI_API_KEY;
+  const oldModel = process.env.OPENAI_TEXT_MODEL;
+  process.env.OPENAI_API_KEY = "test-key-never-sent-to-a-real-service";
+  process.env.OPENAI_TEXT_MODEL = "test-model";
+  const script = {
+    title: "静夜思",
+    author: "李白",
+    originalText: "床前明月光，疑是地上霜。",
+    explanation: "诗人借月光表达思乡之情。",
+    sources: [{ title: "作品资料", url: "https://example.com/poem", excerpt: "静夜思" }],
+    scenes: Array.from({ length: 4 }, (_, index) => ({
+      id: `scene-${index + 1}`,
+      narration: `第${index + 1}幕旁白`,
+      visualPrompt: `第${index + 1}幕国风画面`,
+      durationSeconds: 8,
+    })),
+  };
+  let requestBody: Record<string, unknown> | undefined;
+  let requestHeaders: HeadersInit | undefined;
+  const provider = new OpenAIScriptProvider(async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    requestHeaders = init?.headers;
+    return new Response(JSON.stringify({ output_text: JSON.stringify(script) }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+  try {
+    assert.deepEqual(
+      await provider.create(input, {
+        signal: new AbortController().signal,
+        idempotencyKey: "script-test-123456",
+        maxCostMinorUnits: 100,
+      }),
+      script,
+    );
+    assert.equal(requestBody?.model, "test-model");
+    assert.equal(requestBody?.store, false);
+    assert.deepEqual(requestBody?.tools, [{ type: "web_search" }]);
+    assert.equal(
+      (requestBody?.text as { format: { type: string } }).format.type,
+      "json_schema",
+    );
+    assert.equal(
+      (requestHeaders as Record<string, string>)["Idempotency-Key"],
+      "script-test-123456",
+    );
+    assert.equal(capabilities().scriptReady, true);
+  } finally {
+    if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.OPENAI_TEXT_MODEL;
+    else process.env.OPENAI_TEXT_MODEL = oldModel;
+  }
+});
+
+test("OpenAI script adapter fails closed without credentials or valid output", async () => {
+  const oldKey = process.env.OPENAI_API_KEY;
+  try {
+    delete process.env.OPENAI_API_KEY;
+    await assert.rejects(
+      new OpenAIScriptProvider().create(input, {
+        signal: new AbortController().signal,
+        idempotencyKey: "script-test-absence",
+        maxCostMinorUnits: 100,
+      }),
+      errorCode("SERVICE_NOT_CONFIGURED"),
+    );
+    process.env.OPENAI_API_KEY = "test-key-never-sent-to-a-real-service";
+    await assert.rejects(
+      new OpenAIScriptProvider(async () =>
+        new Response(JSON.stringify({ output_text: "{}" }), { status: 200 }),
+      ).create(input, {
+        signal: new AbortController().signal,
+        idempotencyKey: "script-test-invalid",
+        maxCostMinorUnits: 100,
+      }),
+      errorCode("SCRIPT_PROVIDER_INVALID"),
+    );
+  } finally {
+    if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = oldKey;
   }
 });
 

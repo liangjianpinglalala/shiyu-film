@@ -14,6 +14,8 @@ export function config() {
     ),
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
+    openaiApiKey: process.env.OPENAI_API_KEY || "",
+    openaiTextModel: process.env.OPENAI_TEXT_MODEL || "gpt-5.6-luna",
     origin:
       process.env.APP_ORIGIN ||
       process.env.RENDER_EXTERNAL_URL ||

@@ -54,10 +54,16 @@ export function generationProvider(): GenerationProvider {
 }
 export function capabilities(): Capabilities {
   const demo = config().mode === "demo";
+  const scriptReady = Boolean(config().openaiApiKey);
   return {
     mode: demo ? "demo" : "live",
     authReady: config().secret.length >= 32,
+    scriptReady,
     generationReady: demo,
-    message: demo ? "账号登录已启用 · 动画为演示流程" : "AI 制作服务尚未配置",
+    message: demo
+      ? "账号登录已启用 · 动画为演示流程"
+      : scriptReady
+        ? "AI 脚本服务已就绪 · 成片服务待配置"
+        : "AI 制作服务尚未配置",
   };
 }

@@ -14,15 +14,15 @@
 
 任务只允许创建者查询、删除、下载与重试。提交使用幂等键，每人最多一个活动任务、每日二十次提交。后台持久化排队、执行阶段、检查点和有限重试，网页轮询状态；关闭页面不会取消任务。
 
-## AI 扩展（尚未实现）
+## AI 扩展
 
-1. ScriptProvider：查证原文与出处，生成结构化脚本及分镜。
+1. ScriptProvider：已实现 OpenAI Responses API 适配器，使用网页检索和严格 JSON Schema 生成经校验的脚本及分镜。
 2. ImageProvider：生成一致风格的场景图片。
 3. SpeechProvider：合成配音并对齐字幕时间。
 4. RenderProvider：通过 FFmpeg 合成画面、配音与字幕，输出 MP4。
 5. ArtifactStore：私有保存素材与成片，授权下载。
 
-适配器接口位于 lib/server/media-contracts.ts。下一阶段需保存供应商任务 ID、实现长任务轮询和租约续期、记录成本并设置上限、验证生成质量与真实文件。现有 30 秒阶段超时不能直接套用长时视频生成。
+适配器接口位于 lib/server/media-contracts.ts，OpenAI 脚本适配器位于 lib/server/openai-script.ts。配置 `OPENAI_API_KEY` 后能力接口会报告脚本服务就绪；完整生成入口仍会保持关闭，直到画面、配音、渲染和存储全部完成。下一阶段需保存供应商任务 ID、实现长任务轮询和租约续期、记录成本并设置上限、验证生成质量与真实文件。现有 30 秒阶段超时不能直接套用长时视频生成。
 
 ## 当前完成与后续条件
 

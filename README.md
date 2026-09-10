@@ -1,6 +1,6 @@
 # 诗语映画 · 服务端开发版
 
-Next.js + React + TypeScript 国风知识动画网站。v0.2 将原型的浏览器登录与计时器替换为服务端会话、持久任务和独立 Worker。账号密码登录已实现；AI 供应商尚未选择，制作当前只运行明确标识的演示适配器。
+Next.js + React + TypeScript 国风知识动画网站。账号密码登录、持久任务及 OpenAI 结构化脚本适配器已经实现；画面、配音、渲染和存储仍待接入，生产成片入口在全部能力就绪前保持关闭。
 
 ## 运行
 
@@ -24,7 +24,8 @@ npm run dev
 - 幂等提交避免同一请求重复创建；任务的设置独立保存。
 - 后台执行 5 个演示步骤，保存检查点、租约和有限重试。支持工作进程崩溃后续跑，旧执行者不能覆盖新租约结果。
 - 生产数据库适配 PostgreSQL；配置 REDIS_URL 时 Worker 用 BullMQ 分发，定期根据数据库补投遗漏任务。
-- 未选服务商时真实模式明确返回未配置，不请求 AI。
+- OpenAI Responses API 脚本适配器使用网页检索、严格 JSON Schema、服务端密钥和幂等键，并校验输出。
+- 完整成片服务未就绪时真实模式明确返回未配置，不请求 AI。
 - 各制作服务接口见 `lib/server/media-contracts.ts`，流程接口见 `lib/server/providers.ts`。
 
 ## 仍未实现的部分
@@ -43,6 +44,8 @@ npm run dev
 - `APP_ORIGIN`：请求允许的完整来源，必须与浏览器地址一致。
 - `DATABASE_URL`：配置则用 PostgreSQL，否则本地 SQLite。
 - `REDIS_URL`：配置则使用 BullMQ，否则本地数据库持久队列。
+- `OPENAI_API_KEY`：仅服务端读取的 OpenAI API Key；不得使用 `NEXT_PUBLIC_` 前缀或提交到 Git。
+- `OPENAI_TEXT_MODEL`：脚本模型，默认 `gpt-5.6-luna`。
 - `TRUST_PROXY=true`：仅能在反向代理会覆盖不可信转发头时设置。默认所有请求共享保守网络额度。
 
 `compose.yaml` 提供 PostgreSQL、Redis、网站、Worker 的部署结构，启动前设置 SITE_HOST、APP_ORIGIN、AUTH_SECRET、POSTGRES_PASSWORD（使用随机十六进制密码，避免 URI 特殊字符），内含 Caddy HTTPS 反向代理，部署步骤见 [后台部署](docs/DEPLOYMENT.md)。数据库和 Redis 不开放宿主机端口。该结构尚未在本机实跑：本机没有 Docker、PostgreSQL 或 Redis。生产供应商仍待接入，不能直接对外提供成片服务。
