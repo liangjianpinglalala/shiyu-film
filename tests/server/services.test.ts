@@ -520,6 +520,34 @@ test("OpenAI media adapters store generated image and narration as private artif
     else process.env.OPENAI_API_KEY = oldKey;
   }
 });
+test("OpenAI media adapter exposes a safe provider error code without response details", async () => {
+  const oldKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key-never-sent-to-a-real-service";
+  const store = {
+    async put() {},
+    async read() { return { data: new Uint8Array(), mimeType: "image/png" }; },
+    async remove() {},
+  };
+  try {
+    await assert.rejects(
+      new OpenAIImageProvider(store, async () =>
+        new Response(JSON.stringify({ error: { code: "billing_hard_limit_reached", message: "sensitive detail" } }), {
+          status: 429,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ).create(
+        { id: "one", narration: "旁白", visualPrompt: "月光", durationSeconds: 6 },
+        [],
+        { signal: new AbortController().signal, idempotencyKey: "error-test", maxCostMinorUnits: 100 },
+      ),
+      (error: unknown) =>
+        (error as Error).message === "AI 画面生成失败（billing_hard_limit_reached）",
+    );
+  } finally {
+    if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = oldKey;
+  }
+});
 
 test("FFmpeg renderer builds a ratio-aware captioned MP4 and stores it", async () => {
   const assets = new Map<string, { data: Uint8Array; mimeType: string }>([

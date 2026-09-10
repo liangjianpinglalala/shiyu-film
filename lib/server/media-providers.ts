@@ -11,6 +11,19 @@ import type {
 
 type Request = typeof fetch;
 
+async function providerFailure(response: Response, label: string, code: string) {
+  let detail = "unknown";
+  try {
+    const payload = (await response.json()) as { error?: { code?: string; type?: string } };
+    detail = payload.error?.code || payload.error?.type || detail;
+  } catch {}
+  return new AppError(
+    response.status === 429 ? 429 : 503,
+    code,
+    `${label}失败（${detail.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 80)}）`,
+  );
+}
+
 export class VercelBlobStore implements ArtifactStore {
   async put(key: string, data: Uint8Array, mimeType: string) {
     if (!config().blobReady) throw unavailable("素材存储尚未配置");
@@ -61,7 +74,7 @@ export class OpenAIImageProvider implements ImageProvider {
       }),
     });
     if (!response.ok)
-      throw new AppError(response.status === 429 ? 429 : 503, "IMAGE_PROVIDER_FAILED", "AI 画面生成失败");
+      throw await providerFailure(response, "AI 画面生成", "IMAGE_PROVIDER_FAILED");
     const payload = (await response.json()) as { data?: Array<{ b64_json?: string }> };
     const encoded = payload.data?.[0]?.b64_json;
     if (!encoded) throw new AppError(503, "IMAGE_PROVIDER_INVALID", "AI 画面结果为空");
@@ -96,7 +109,7 @@ export class OpenAISpeechProvider implements SpeechProvider {
       }),
     });
     if (!response.ok)
-      throw new AppError(response.status === 429 ? 429 : 503, "SPEECH_PROVIDER_FAILED", "AI 配音生成失败");
+      throw await providerFailure(response, "AI 配音生成", "SPEECH_PROVIDER_FAILED");
     const data = new Uint8Array(await response.arrayBuffer());
     if (!data.length) throw new AppError(503, "SPEECH_PROVIDER_INVALID", "AI 配音结果为空");
     const assetKey = `jobs/${context.idempotencyKey}/narration.mp3`;
