@@ -8,12 +8,13 @@ import {
   cookieOptions,
 } from "../../../lib/server/http";
 import { AuthService, limit } from "../../../lib/server/auth";
-import { JobService, jobSchema, present } from "../../../lib/server/jobs";
+import { JobService, jobSchema, present, processOne } from "../../../lib/server/jobs";
 import { capabilities } from "../../../lib/server/providers";
 import { AppError } from "../../../lib/server/errors";
 import { database } from "../../../lib/server/db";
 import { OpenAIScriptProvider } from "../../../lib/server/openai-script";
 import { randomUUID } from "node:crypto";
+import { VercelBlobStore } from "../../../lib/server/media-providers";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -89,9 +90,14 @@ const handler = route(async (request) => {
     );
     return NextResponse.json({ job }, { status: 202 });
   }
-  const match = /^jobs\/([a-f0-9-]{36})(?:\/(download|retry))?$/.exec(path);
+  const match = /^jobs\/([a-f0-9-]{36})(?:\/(download|retry|process))?$/.exec(path);
   if (match) {
     const [, id, action] = match;
+    if (action === "process" && method === "POST") {
+      await jobs.get(user.id, id);
+      await processOne(jobs, undefined, id, 1);
+      return NextResponse.json({ ok: true });
+    }
     if (action === "retry" && method === "POST") {
       await jobs.retry(user.id, id);
       return NextResponse.json({ ok: true });
@@ -105,8 +111,19 @@ const handler = route(async (request) => {
       if (action === "download") {
         if (job.status !== "completed")
           throw new AppError(409, "NOT_READY", "作品尚未完成");
-        if (job.mode !== "demo")
-          throw new AppError(503, "NOT_IMPLEMENTED", "成片存储服务尚未接入");
+        if (job.mode !== "demo") {
+          const result = job.result ? JSON.parse(job.result) : null;
+          const key = result?.data?.video?.assetKey;
+          if (typeof key !== "string")
+            throw new AppError(503, "ASSET_NOT_READY", "成片文件尚未就绪");
+          const asset = await new VercelBlobStore().read(key);
+          return new Response(asset.data, {
+            headers: {
+              "Content-Type": "video/mp4",
+              "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(JSON.parse(job.input).title + ".mp4")}`,
+            },
+          });
+        }
         const input = JSON.parse(job.input);
         const text = `诗语映画 · 服务端演示说明\n题目：${input.title}\n画面比例：${input.ratio}\n适合：${input.age}\n任务编号：${job.id}\n\n已通过服务端队列完成演示流程。尚未调用 AI 生成脚本或 MP4。`;
         return new Response(text, {

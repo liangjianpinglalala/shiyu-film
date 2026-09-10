@@ -368,6 +368,27 @@ test("Vercel uses configured production origin, never the request host", () => {
     });
   }
 });
+test("serverless processing can advance exactly one durable stage per request", async () => {
+  const s = await setup();
+  try {
+    const job = await s.jobs.create(s.session.user.id, input, "stage-request-12345");
+    const calls: number[] = [];
+    const provider: GenerationProvider = {
+      async runStage({ stage, previous }) {
+        calls.push(stage);
+        return { kind: "demo-manifest", data: { ...(previous?.data || {}), stage } };
+      },
+    };
+    await processOne(s.jobs, provider, job.id, 1);
+    assert.deepEqual(calls, [0]);
+    assert.equal((await s.jobs.get(s.session.user.id, job.id)).step, 1);
+    await processOne(s.jobs, provider, job.id, 1);
+    assert.deepEqual(calls, [0, 1]);
+    assert.equal((await s.jobs.get(s.session.user.id, job.id)).step, 2);
+  } finally {
+    await s.db.close();
+  }
+});
 
 test("OpenAI script adapter sends a structured, non-stored request and validates output", async () => {
   const oldKey = process.env.OPENAI_API_KEY;

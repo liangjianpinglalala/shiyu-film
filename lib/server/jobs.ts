@@ -197,7 +197,7 @@ export class JobService {
       const token = randomUUID();
       await q(
         "UPDATE jobs SET status='running',attempts=attempts+1,lease_until=$2,lease_token=$3,updated_at=$4 WHERE id=$1",
-        [row.id, this.now() + 60000, token, this.now()],
+        [row.id, this.now() + config().leaseDuration, token, this.now()],
       );
       return {
         ...row,
@@ -217,7 +217,7 @@ export class JobService {
           step,
           JSON.stringify(result),
           step === 5 ? "completed" : "running",
-          step === 5 ? 0 : this.now() + 60000,
+          step === 5 ? 0 : this.now() + config().leaseDuration,
           this.now(),
         ],
       );
@@ -242,11 +242,20 @@ export class JobService {
       ),
     );
   }
+  async release(row: JobRow) {
+    await this.db.transaction((q) =>
+      q(
+        "UPDATE jobs SET status='queued',lease_until=0,lease_token=NULL,updated_at=$3 WHERE id=$1 AND lease_token=$2 AND status='running'",
+        [row.id, row.lease_token, this.now()],
+      ),
+    );
+  }
 }
 export async function processOne(
   jobs = new JobService(),
   provider: GenerationProvider = generationProvider(),
   id?: string,
+  maxStages = 5,
 ) {
   const row = await jobs.claim(id);
   if (!row) return false;
@@ -254,7 +263,8 @@ export async function processOne(
     if (row.mode !== config().mode)
       throw new AppError(409, "MODE_MISMATCH", "任务模式与当前服务模式不一致");
     let previous = row.result ? (JSON.parse(row.result) as StageResult) : null;
-    for (let stage = row.step; stage < 5; stage++) {
+    const stopAt = Math.min(5, row.step + maxStages);
+    for (let stage = row.step; stage < stopAt; stage++) {
       const controller = new AbortController();
       let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -271,7 +281,7 @@ export async function processOne(
             timeout = setTimeout(() => {
               controller.abort();
               reject(new AppError(504, "STAGE_TIMEOUT", "制作步骤超时"));
-            }, 30000);
+            }, config().stageTimeout);
           }),
         ]);
         if (!(await jobs.checkpoint(row, stage + 1, result))) return false;
@@ -280,6 +290,7 @@ export async function processOne(
         clearTimeout(timeout);
       }
     }
+    if (stopAt < 5) await jobs.release(row);
   } catch (e) {
     await jobs.fail(row, e);
   }

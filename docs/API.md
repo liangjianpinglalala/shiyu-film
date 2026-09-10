@@ -11,6 +11,7 @@
 | GET    | /api/auth/me           | 当前用户（id、username）或 null                   |
 | POST   | /api/auth/logout       | `{}` 撤销服务端会话与 cookie          |
 | POST   | /api/jobs              | 创建任务，需要 Idempotency-Key 请求头 |
+| POST   | /api/jobs/:id/process  | 校验作品归属并推进一个持久化制作阶段 |
 | GET    | /api/jobs              | 当前用户最近 100 个任务               |
 | POST   | /api/scripts           | 生成经校验的 AI 资料与动画分镜脚本；每账号每日最多 5 次 |
 | GET    | /api/jobs/:id          | 查询本人任务                          |

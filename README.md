@@ -1,6 +1,6 @@
 # 诗语映画 · 服务端开发版
 
-Next.js + React + TypeScript 国风知识动画网站。账号密码登录、持久任务、OpenAI 脚本/国风画面/普通话配音适配器、Vercel Blob 私有存储和 FFmpeg MP4 渲染器已经实现；完整任务编排仍待接入，生产成片入口在全部能力就绪前保持关闭。
+Next.js + React + TypeScript 国风知识动画网站。账号密码登录、持久任务、OpenAI 脚本/国风画面/普通话配音、Vercel Blob 私有存储和 FFmpeg MP4 渲染已经串成完整流水线。生产任务由浏览器逐阶段触发，检查点保存在数据库，刷新后可继续并在完成后授权下载 MP4。
 
 ## 运行
 

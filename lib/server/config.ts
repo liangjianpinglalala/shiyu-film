@@ -34,5 +34,7 @@ export function config() {
       mode === "demo"
         ? Math.max(0, Number(process.env.DEMO_STEP_MS ?? 1000))
         : 0,
+    stageTimeout: mode === "demo" ? 30000 : 240000,
+    leaseDuration: mode === "demo" ? 60000 : 280000,
   } as const;
 }

@@ -99,7 +99,7 @@ export default function Home() {
     ({
       queued: "排队中",
       running: "制作中",
-      completed: "演示完成",
+      completed: w.mode === "demo" ? "演示完成" : "制作完成",
       failed: "制作失败",
     })[w.status];
   function handleError(e: unknown) {
@@ -157,6 +157,8 @@ export default function Home() {
           setSelected(current);
           setStep(current.step);
           if (current.status === "queued" || current.status === "running") {
+            if (cap?.mode === "live")
+              await api("jobs/" + current.id + "/process", "POST", {});
             if (!activeId) {
               setActiveId(current.id);
               setPage("progress");
@@ -183,7 +185,7 @@ export default function Home() {
       alive = false;
       clearInterval(timer);
     };
-  }, [user, activeId]);
+  }, [user, activeId, cap?.mode]);
 
   useEffect(() => {
     if (!notice) return;
@@ -362,7 +364,8 @@ export default function Home() {
       const url = URL.createObjectURL(await response.blob());
       const a = document.createElement("a");
       a.href = url;
-      a.download = selected.title + "-演示说明.txt";
+      a.download =
+        selected.title + (selected.mode === "demo" ? "-演示说明.txt" : ".mp4");
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
@@ -855,7 +858,7 @@ export default function Home() {
                 <div>
                   <span className="eyebrow">YOUR STORY</span>
                   <h1>{selected.title}</h1>
-                  <p>{selected.kind} · 国风绘本 · 演示作品</p>
+                  <p>{selected.kind} · 国风绘本 · {selected.mode === "demo" ? "演示作品" : "AI 成片"}</p>
                 </div>
                 <button
                   className="secondary"
@@ -896,10 +899,12 @@ export default function Home() {
                       </button>
                     </div>
                   )}
-                  <span className="demo-badge">原型演示结果</span>
-                  <h2>故事的起点，已经准备好。</h2>
+                  <span className="demo-badge">{selected.mode === "demo" ? "原型演示结果" : "AI 自动成片"}</span>
+                  <h2>{selected.mode === "demo" ? "故事的起点，已经准备好。" : "你的动画已经制作完成。"}</h2>
                   <p>
-                    任务和制作设置已保存在服务器。当前画面为预置模板，并非根据题目生成的成片。
+                    {selected.mode === "demo"
+                      ? "任务和制作设置已保存在服务器。当前画面为预置模板，并非根据题目生成的成片。"
+                      : "脚本、国风画面、普通话配音、字幕与剪辑均已由后台自动完成。"}
                   </p>
                   <button
                     className="primary"
@@ -907,11 +912,13 @@ export default function Home() {
                     disabled={selected.status !== "completed"}
                   >
                     <Download size={16} />
-                    下载演示说明
+                    {selected.mode === "demo" ? "下载演示说明" : "下载 MP4 成片"}
                   </button>
-                  <p className="muted">
-                    MP4、真实配音、字幕与资料来源将在后续 AI 服务接入后提供。
-                  </p>
+                  {selected.mode === "demo" && (
+                    <p className="muted">
+                      MP4、真实配音、字幕与资料来源将在后续 AI 服务接入后提供。
+                    </p>
+                  )}
                 </div>
               </div>
             </section>

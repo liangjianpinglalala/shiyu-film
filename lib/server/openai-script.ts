@@ -19,7 +19,7 @@ const scriptSchema = z.object({
     narration: z.string().min(1).max(600),
     visualPrompt: z.string().min(1).max(1000),
     durationSeconds: z.number().int().min(4).max(30),
-  })).min(4).max(8),
+  })).length(4),
 });
 
 const jsonSchema = {
@@ -49,7 +49,7 @@ const jsonSchema = {
     scenes: {
       type: "array",
       minItems: 4,
-      maxItems: 8,
+      maxItems: 4,
       items: {
         type: "object",
         additionalProperties: false,
